@@ -1,0 +1,943 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Lobby · Kaizen Pop-Cat</title>
+<link rel="icon" href="img/popcat-open.png">
+<link rel="preconnect" href="https://YOUR-PROJECT.supabase.co" crossorigin>
+<!-- MUST STAY ABOVE EVERY <link rel="stylesheet">: a parser-inserted
+     script waits for preceding stylesheets, which pinned this RPC to the
+     style.css download and undid the whole point of firing it early. -->
+<script>
+/* Same trick as the board: start the one request this page is actually waiting
+   on before the stylesheet, fonts and scripts are even parsed. Measured on
+   production this page's first get_board took 4983ms and did not start until
+   633ms -- the worst of the three screens, because the creature preloader
+   (1.06MB of PNG) was competing with it for bandwidth. See firstBoard().
+   The URL and key are literals on purpose; the reasoning, and the guard that
+   stops the two copies drifting, are spelled out in leaderboard.html. */
+var B0U = 'https://YOUR-PROJECT.supabase.co', B0K = 'YOUR-SUPABASE-ANON-KEY';
+window.__board0 = fetch(B0U + '/rest/v1/rpc/get_board', {
+  method: 'POST',
+  headers: { apikey: B0K, Authorization: 'Bearer ' + B0K,
+             'Content-Type': 'application/json' },
+  body: JSON.stringify({ p_limit: 400 })
+}).then(r => r.ok ? r.json() : null)
+  .then(b => { window.__board0t = Date.now(); return b; })
+  .catch(() => null);
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- non-blocking, like the other two screens: this was a plain stylesheet link,
+     which held first paint on a third-party round trip for no reason -->
+<link rel="stylesheet" media="print" onload="this.media='all'"
+      href="https://fonts.googleapis.com/css2?family=Anton&family=Space+Grotesk:wght@400;600;700&family=Noto+Sans+Thai:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="style.css">
+<!-- the room switches to the board by hand; have it in cache before they do -->
+<link rel="prefetch" href="/leaderboard">
+<script src="config.js"></script>
+<script>
+if (CFG.SUPABASE_URL !== B0U || CFG.SUPABASE_ANON_KEY !== B0K)
+  console.error('head prefetch credentials disagree with config.js');
+</script>
+<style>
+  #app{
+    height:100dvh;
+    display:grid;grid-template-rows:auto 1fr auto;gap:clamp(8px,1.3vh,18px);
+    padding:clamp(10px,2vh,24px) clamp(10px,2vw,28px);
+  }
+
+  /* ══ header — same lockup as the board ═══════════════════ */
+  header{display:flex;align-items:center;gap:clamp(8px,1.4vw,20px);flex-wrap:wrap}
+  .lockup{display:flex;align-items:center;gap:clamp(8px,1vw,14px);min-width:0}
+  .hcat{
+    width:clamp(38px,5vw,86px);flex:none;
+    filter:drop-shadow(0 6px 16px rgba(0,0,0,.7)) drop-shadow(0 0 30px rgba(255,122,26,.75));
+    animation:bob 5s ease-in-out infinite
+  }
+  @keyframes bob{50%{transform:translateY(-5px) rotate(-4deg)}}
+  .titles{min-width:0}
+  h1{
+    margin:0;font-size:clamp(20px,3.5vw,54px);line-height:.94;
+    background:linear-gradient(100deg,#fff 4%,var(--ember) 38%,var(--pumpkin) 62%,var(--witch));
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 6px 26px rgba(255,122,26,.35))
+  }
+  .subline{
+    display:flex;align-items:center;gap:.9em;margin-top:.35em;flex-wrap:wrap;
+    font-size:clamp(8px,.78vw,13px)
+  }
+  .subline .adi{font-size:inherit}
+  .subline .sep{width:1px;height:1.4em;background:var(--hair)}
+  .subline .live{
+    display:inline-flex;align-items:center;gap:.5em;color:var(--dim);
+    letter-spacing:.2em;text-transform:uppercase;font-weight:600
+  }
+  .subline .live i{width:5px;height:5px;border-radius:50%;background:var(--toxic);
+    box-shadow:0 0 9px var(--toxic);animation:blip 2.4s ease-in-out infinite}
+
+  /* headcount: the number the host is actually waiting on */
+  .tally{
+    display:flex;align-items:baseline;gap:.5em;
+    padding:.3em .9em .36em;border-radius:18px;
+    background:var(--glass);border:1px solid var(--hair);box-shadow:var(--inset);
+  }
+  .tally b{
+    font-family:var(--font-display);font-variant-numeric:tabular-nums;
+    font-size:clamp(24px,3.4vw,52px);line-height:1;color:var(--ember);
+    text-shadow:0 0 26px rgba(255,193,77,.45);
+    transition:transform .5s var(--pop)
+  }
+  .tally.bump b{transform:scale(1.16)}
+  .tally span{
+    font-size:clamp(8px,.72vw,12px);letter-spacing:.2em;text-transform:uppercase;
+    color:var(--dim);font-weight:700
+  }
+  .rightbar{margin-left:auto;display:flex;align-items:center;gap:clamp(6px,.8vw,12px);flex-wrap:wrap}
+  .sndbar{display:flex;gap:6px;align-items:center}
+  .sndbtn{
+    display:flex;align-items:center;gap:.45em;cursor:pointer;
+    padding:.42em .72em;border-radius:10px;
+    background:var(--glass-2);border:1px solid var(--hair-soft);
+    box-shadow:var(--inset);color:var(--dim);
+    font-size:clamp(8px,.68vw,11px);letter-spacing:.16em;text-transform:uppercase;font-weight:700;
+    transition:color .3s var(--spring),border-color .3s var(--spring),background .3s var(--spring)
+  }
+  .sndbtn.on{color:var(--ember);border-color:rgba(255,193,77,.5);background:rgba(255,193,77,.10)}
+  .sndbtn.off{opacity:.5}
+
+  /* ══ main: QR plate + the bubble field ═══════════════════ */
+  main{
+    min-height:0;
+    display:grid;grid-template-columns:auto minmax(0,1fr);
+    gap:clamp(8px,1.2vw,20px);
+  }
+
+  .qrcard{width:clamp(190px,19vw,320px);flex:none}
+  .qrcard > .core{
+    height:100%;padding:clamp(10px,1.4vh,20px);
+    display:grid;grid-template-rows:auto auto auto auto 1fr;justify-items:center;gap:clamp(6px,1vh,14px);
+    text-align:center
+  }
+  .qrpanel{
+    /* the PNG carries its own 10.8% quiet zone, so ANY padding here is just
+       dead white space around a code the room is trying to read from 8m away */
+    width:100%;aspect-ratio:1;border-radius:18px;padding:0;overflow:hidden;
+    background:linear-gradient(180deg,#fffdf7,#ece5d4);
+    box-shadow:0 18px 40px -22px rgba(0,0,0,.9), inset 0 0 0 1px rgba(0,0,0,.06);
+    position:relative
+  }
+  .qrpanel img{width:100%;height:100%;display:block;image-rendering:pixelated}
+  /* the leftover column height is real estate, not padding — the cat fills it */
+  .qrcat{
+    align-self:end;justify-self:center;
+    max-width:100%;max-height:100%;width:auto;object-fit:contain;min-height:0;
+    filter:drop-shadow(0 16px 26px rgba(0,0,0,.7)) drop-shadow(0 0 30px rgba(255,122,26,.34));
+    animation:bob 5s ease-in-out infinite
+  }
+  /* the shimmer the rest of the kit uses, swept across the plate */
+  .qrpanel::after{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background:linear-gradient(115deg,transparent 38%,rgba(255,255,255,.75) 50%,transparent 62%);
+    transform:translateX(-120%);
+    animation:sheen 5.5s ease-in-out 1.2s infinite
+  }
+  @keyframes sheen{0%{transform:translateX(-120%)}38%,100%{transform:translateX(120%)}}
+  .qrurl{
+    font-family:var(--font-display);font-size:clamp(10px,.95vw,17px);
+    letter-spacing:.04em;color:var(--ember);word-break:break-all;line-height:1.2
+  }
+  .qrhint{
+    font-size:clamp(8px,.62vw,11px);letter-spacing:.15em;text-transform:uppercase;
+    color:var(--dim);font-weight:600;line-height:1.5;align-self:start
+  }
+
+  .field{min-width:0;min-height:0}
+  .field > .core{height:100%;position:relative;overflow:hidden}
+  #bubbles{position:absolute;inset:0;overflow:hidden;z-index:1}
+
+  /* ══ TRON LAYER ═══════════════════════════════════════════
+     The play page reads "alive" because a light band is always travelling
+     across something. Here that is done with exactly THREE animated elements
+     for the whole field — never one per bubble, or 150 players means 150
+     extra compositor layers on the projector. Everything below moves by
+     transform/opacity only. */
+
+  /* 1. the grid floor. Two tiled hairlines drifting as one plane. */
+  .field > .core::before{
+    content:"";position:absolute;inset:-60px;pointer-events:none;z-index:0;
+    background:
+      repeating-linear-gradient(90deg, rgba(255,164,80,.13) 0 1px, transparent 1px 64px),
+      repeating-linear-gradient(0deg,  rgba(176,124,255,.11) 0 1px, transparent 1px 64px);
+    mask-image:radial-gradient(ellipse 78% 68% at 50% 52%, #000 40%, transparent 78%);
+    -webkit-mask-image:radial-gradient(ellipse 78% 68% at 50% 52%, #000 40%, transparent 78%);
+    animation:tronpan 26s linear infinite
+  }
+  @keyframes tronpan{to{transform:translate3d(64px,64px,0)}}
+
+  /* 2. the sweep. "วูบวาบ" is a FLASH, not a wash — so this crosses fast and
+     then waits in the dark. A band that is always visible stops being an event. */
+  .field > .core::after{
+    content:"";position:absolute;top:-30%;bottom:-30%;left:0;width:30%;
+    pointer-events:none;z-index:2;
+    background:linear-gradient(105deg,
+      transparent 36%,
+      rgba(255,150,60,.13) 46%,
+      rgba(255,205,130,.26) 49.5%,
+      rgba(255,246,228,.36) 50.5%,
+      rgba(176,124,255,.18) 55%,
+      transparent 64%);
+    transform:translate3d(-150%,0,0) rotate(6deg);
+    opacity:0;
+    will-change:transform,opacity;
+    animation:fieldsweep 7s linear infinite
+  }
+  /* 0% must already be safe to look at: an animation can sit un-started for a
+     beat, and off-screen + invisible is the only honest resting state here */
+  @keyframes fieldsweep{
+    0%       {transform:translate3d(-150%,0,0) rotate(6deg);opacity:0}
+    4%       {opacity:1}
+    24%      {transform:translate3d(340%,0,0)  rotate(6deg);opacity:1}
+    26%,100% {transform:translate3d(340%,0,0)  rotate(6deg);opacity:0}
+  }
+
+  /* 3. the lit rim — a neon edge that breathes instead of sitting dead.
+     This USED to animate box-shadow directly on .core, and that one line was
+     the single most expensive thing on the projector: an animated box-shadow
+     repaints the entire field every frame. A/B'd old-vs-new at 60 players,
+     3 interleaved reps each — OLD 50.0ms/frame (20fps) with 32-38 frames over
+     50ms, NEW 16.7ms with ZERO, and the separation was clean in every rep.
+     A blank control page on the same machine also held 16.7ms, which is how
+     we know 50ms was the page and not the measuring rig.
+     Now the hot rim is its own layer, painted once, and only its OPACITY
+     moves — which the compositor does without touching the main thread. The
+     dim state is a static shadow underneath, so the two crossfade.
+     (CPU reads HIGHER after this fix — 27% -> 37% — because the page now
+     renders three times as many frames. That is the fix working, not a cost.) */
+  .field > .core{
+    box-shadow:
+      inset 0 0 0 1px rgba(255,150,60,.18),
+      inset 0 1px 0 rgba(255,255,255,.12),
+      inset 0 0 40px -14px rgba(255,140,50,.36);
+  }
+  .field > .core > .rim{
+    position:absolute;inset:0;pointer-events:none;z-index:3;border-radius:inherit;
+    box-shadow:
+      inset 0 0 0 1px rgba(255,205,130,.50),
+      inset 0 1px 0 rgba(255,255,255,.26),
+      inset 0 0 70px -8px rgba(255,150,60,.72);
+    opacity:0;will-change:opacity;
+    animation:tronrim 5.4s ease-in-out infinite
+  }
+  @keyframes tronrim{0%,100%{opacity:0}50%{opacity:1}}
+
+  /* 4. the arrival flare — the field edge ANSWERS when someone walks in.
+     Same rule as .rim above: a pre-painted layer whose opacity is the only
+     thing that moves. Animating this box-shadow directly would repaint the
+     whole field, which is the exact 50ms/frame bug that was measured out of
+     here once already. */
+  .field > .core > .flare{
+    position:absolute;inset:0;pointer-events:none;z-index:4;border-radius:inherit;
+    box-shadow:
+      inset 0 0 0 2px rgba(255,216,150,.95),
+      inset 0 0 26px -2px rgba(255,190,110,.75),
+      inset 0 0 120px -16px rgba(255,140,45,.85),
+      inset 0 0 220px -60px rgba(176,124,255,.5);
+    opacity:0;will-change:opacity
+  }
+
+  /* the shared travelling band, reused on every shell so the whole page
+     shimmers on ONE visual rhythm instead of four unrelated ones */
+  .shimmer{position:relative;overflow:hidden}
+  .shimmer::after{
+    content:"";position:absolute;top:0;bottom:0;left:0;width:38%;pointer-events:none;z-index:3;
+    background:linear-gradient(105deg,transparent 36%,rgba(255,255,255,.17) 50%,transparent 64%);
+    transform:translate3d(-130%,0,0);will-change:transform;
+    animation:mshine 5.2s linear infinite
+  }
+  @keyframes mshine{to{transform:translate3d(330%,0,0)}}
+  /* staggered so they never flash in unison — that reads as a broken loop */
+  .tally::after{animation-duration:3.9s}
+  .qrcard::after{animation-duration:6.4s;animation-delay:.8s}
+  .dept:nth-child(2)::after{animation-duration:4.4s;animation-delay:.3s}
+  .dept:nth-child(3)::after{animation-duration:5.1s;animation-delay:.9s}
+  .dept:nth-child(4)::after{animation-duration:4.7s;animation-delay:1.4s}
+  .dept:nth-child(5)::after{animation-duration:5.8s;animation-delay:.6s}
+  .dept:nth-child(6)::after{animation-duration:4.2s;animation-delay:1.9s}
+
+  /* ── a player ─────────────────────────────────────────── */
+  .bub{
+    position:absolute;left:0;top:0;
+    /* NO paint containment. It used to be `contain:layout style paint`, and
+       containprobe.mjs proved that was silently erasing the whole arrival
+       effect: with it, lit pixels outside the bubble box measured 0 — without
+       it, 3026. Paint containment clips descendants to the element, and the
+       join ring is drawn OUTSIDE it by definition. Layout and style
+       containment are the parts that were actually earning their keep. */
+    will-change:transform;contain:layout style;
+  }
+  /* the animated wrapper — the join scales THIS, never .bub, because draw()
+     rewrites .bub's transform every frame and the two would fight */
+  .bi{position:absolute;inset:0;transform-origin:50% 46%}
+
+  /* Department colour lives in the aura, not the artwork. The creatures are
+     hand-lit amber and violet glass; hue-rotating them to 25 department
+     colours would turn a beautiful asset into 25 ugly ones. So the art stays
+     exactly as drawn and the department reads from the light around it. */
+  .aura{
+    position:absolute;left:50%;top:46%;width:124%;height:124%;
+    transform:translate(-50%,-50%);border-radius:50%;pointer-events:none;
+    background:radial-gradient(circle,
+      hsla(var(--h),100%,68%,.34) 0%,
+      hsla(var(--h),100%,58%,.15) 36%,
+      hsla(var(--h),95%,52%,.05) 56%,
+      transparent 72%);
+  }
+  .sp{
+    position:absolute;left:0;top:0;width:100%;height:76%;
+    object-fit:contain;pointer-events:none;user-select:none;
+  }
+  /* the nameplate reads as one more piece of glass sitting under the creature,
+     so it belongs to the composition instead of labelling it */
+  .plate{
+    position:absolute;left:50%;bottom:0;transform:translateX(-50%);
+    max-width:108%;display:flex;flex-direction:column;align-items:center;
+    gap:.08em;padding:.26em .66em;border-radius:999px;
+    background:linear-gradient(180deg,hsla(var(--h),62%,17%,.86),hsla(var(--h),72%,7%,.92));
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,.24),
+      0 0 0 1px hsla(var(--h),92%,72%,.36),
+      0 0 18px -6px hsla(var(--h),100%,62%,.7),
+      0 6px 16px -9px rgba(0,0,0,.95);
+  }
+  .bn{
+    font-weight:800;line-height:1.02;color:#fff;
+    max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    text-shadow:0 1px 6px rgba(0,0,0,.8)
+  }
+  .bd{
+    font-weight:700;letter-spacing:.12em;text-transform:uppercase;line-height:1;
+    color:hsla(var(--h),95%,84%,.95);
+    max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap
+  }
+
+  /* ── the summoning ────────────────────────────────────────
+     A join used to be a 0.62s pop to 1.1x plus a ring that paint containment
+     deleted — on a 1920 projector with 60 people on screen, an arrival was
+     effectively invisible. Now the creature condenses out of a flash, holds
+     OVERSIZED and readable for about a second so the room can see who walked
+     in, then sinks into the crowd.
+     --pops is set per-bubble from JS: the hold has to reach a fixed pixel size
+     to be legible from across a room, and a bubble's own radius shrinks as the
+     lobby fills, so a fixed multiplier would be huge at 10 players and
+     pointless at 150. */
+  .bub.in{z-index:6}
+  .bub.in .bi{animation:bsummon 2.45s var(--pop) var(--sumdelay,0s) backwards}
+  @keyframes bsummon{
+    /* 0% is what the room sees if the animation sits un-started, so it is a
+       small arriving creature, never an invisible or quarter-scale one */
+    0%   {transform:scale(.52)}
+    15%  {transform:scale(calc(var(--pops,2) * 1.07))}
+    23%  {transform:scale(var(--pops,2))}
+    60%  {transform:scale(var(--pops,2))}
+    100% {transform:scale(1)}
+  }
+  /* the flash it condenses out of */
+  .bub.in::before{
+    content:"";position:absolute;left:50%;top:46%;width:100%;height:100%;
+    transform:translate(-50%,-50%) scale(.3);border-radius:50%;pointer-events:none;
+    background:radial-gradient(circle,
+      hsla(var(--h),100%,92%,.9),hsla(var(--h),100%,68%,.34) 38%,transparent 68%);
+    opacity:0;animation:bflash .95s var(--pop) var(--sumdelay,0s) forwards
+  }
+  @keyframes bflash{
+    0%  {opacity:0;transform:translate(-50%,-50%) scale(.3)}
+    14% {opacity:1;transform:translate(-50%,-50%) scale(calc(var(--pops,2) * .85))}
+    100%{opacity:0;transform:translate(-50%,-50%) scale(calc(var(--pops,2) * 1.6))}
+  }
+  /* the shockwave — sized off --pops so it always clears the held creature */
+  .bub.in::after{
+    content:"";position:absolute;left:50%;top:46%;width:100%;height:100%;
+    transform:translate(-50%,-50%) scale(.55);border-radius:50%;pointer-events:none;
+    border:2px solid hsla(var(--h),100%,82%,.95);
+    box-shadow:0 0 26px hsla(var(--h),100%,70%,.45);
+    opacity:0;animation:bshock 1.05s var(--pop) var(--sumdelay,0s) forwards
+  }
+  @keyframes bshock{
+    0%  {opacity:0;transform:translate(-50%,-50%) scale(.55)}
+    10% {opacity:.95}
+    100%{opacity:0;transform:translate(-50%,-50%) scale(calc(var(--pops,2) * 1.9))}
+  }
+
+  /* ── nobody here yet ──────────────────────────────────── */
+  #empty{
+    position:absolute;inset:0;z-index:1;display:grid;place-content:center;justify-items:center;
+    gap:clamp(8px,1.4vh,18px);text-align:center;padding:5%
+  }
+  #empty img{width:clamp(70px,9vw,150px);opacity:.92;animation:bob 5s ease-in-out infinite;
+    filter:drop-shadow(0 0 34px rgba(255,122,26,.6))}
+  #empty h2{
+    margin:0;font-size:clamp(18px,2.6vw,44px);line-height:1;
+    color:var(--bone);letter-spacing:.02em
+  }
+  #empty p{
+    margin:0;font-size:clamp(9px,.82vw,14px);letter-spacing:.2em;text-transform:uppercase;
+    color:var(--dim);font-weight:600
+  }
+
+  /* ══ department strip ════════════════════════════════════ */
+  .bottom{display:flex;align-items:stretch;gap:clamp(6px,.8vw,12px);min-height:0}
+  #depts{display:flex;gap:clamp(6px,.8vw,12px);flex:1;min-width:0}
+  .dept{
+    position:relative;flex:1 1 0;min-width:0;overflow:hidden;
+    padding:clamp(6px,.85vh,12px) clamp(8px,.8vw,15px);border-radius:15px;
+    background:var(--glass-2);border:1px solid var(--hair-soft);box-shadow:var(--inset)
+  }
+  .dept .fill{
+    position:absolute;left:0;top:0;bottom:0;width:100%;
+    transform:scaleX(var(--p,0));transform-origin:left center;
+    background:linear-gradient(90deg,hsla(var(--h),80%,55%,.34),hsla(var(--h),80%,55%,.04));
+    transition:transform .8s var(--spring)
+  }
+  .dept .dr{position:relative;display:flex;align-items:center;gap:.55em;min-width:0}
+  .dept .dot{width:.62em;height:.62em;border-radius:50%;flex:none;
+    background:hsl(var(--h),85%,62%);box-shadow:0 0 10px hsla(var(--h),95%,62%,.85)}
+  .dept .dn{
+    font-size:clamp(8px,.72vw,13px);font-weight:700;letter-spacing:.13em;text-transform:uppercase;
+    color:var(--fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0
+  }
+  .dept .dc{
+    margin-left:auto;font-family:var(--font-display);font-variant-numeric:tabular-nums;
+    font-size:clamp(13px,1.35vw,26px);line-height:1;color:var(--ember);flex:none
+  }
+  .more{
+    display:grid;place-items:center;flex:none;padding:0 clamp(8px,.8vw,15px);border-radius:15px;
+    background:var(--glass-2);border:1px solid var(--hair-soft);box-shadow:var(--inset);
+    font-size:clamp(8px,.68vw,12px);letter-spacing:.14em;text-transform:uppercase;
+    color:var(--dim);font-weight:700;text-align:center;line-height:1.3
+  }
+
+  /* ══ tablet / phone ══════════════════════════════════════ */
+  @media (max-width:900px){
+    #app{padding:8px 8px calc(8px + env(safe-area-inset-bottom));gap:8px}
+    .hcat{display:none}
+    main{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
+    .qrcard{width:auto}
+    .qrcard > .core{
+      grid-template-rows:auto;grid-template-columns:auto minmax(0,1fr);
+      align-items:center;justify-items:start;text-align:left;gap:10px
+    }
+    /* the QR is the whole point of this page — keep it big enough that a phone
+       across the table still locks on (measured: 72px did not) */
+    .qrpanel{width:clamp(124px,34vw,170px)}
+    .qrhint{align-self:center}
+    .qrcat{display:none}          /* the column is a 2-col row here — no leftover height */
+    .bottom{display:none}          /* a phone has no room for the strip AND the field */
+  }
+  @media (max-width:430px){
+    .subline .sep,.subline .live{display:none}
+    .tally b{font-size:22px}
+    .rightbar{width:100%;justify-content:space-between}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .qrpanel::after,.bub.in .bi,.bub.in::after,.qrcat,
+    .shimmer::after,.field > .core::before,.field > .core::after{animation:none}
+    .field > .core{animation:none}
+  }
+</style>
+</head>
+<body class="noscroll">
+<div id="app">
+  <header>
+    <div class="lockup">
+      <img class="hcat" src="img/popcat-open.png" alt="" aria-hidden="true">
+      <div class="titles">
+        <h1 id="evtname">KAIZEN POP-CAT</h1>
+        <div class="subline">
+          <img class="adi-logo" src="img/adi-logo.svg" alt="Analog Devices">
+          <span class="sep"></span>
+          <span class="live"><i></i>Halloween 2026 · Lobby</span>
+        </div>
+      </div>
+    </div>
+    <div class="tally shimmer" id="tally"><b id="count">0</b><span>in the lobby</span></div>
+    <div class="rightbar">
+      <div class="sndbar">
+        <button class="sndbtn" id="btnmusic" type="button" title="Backing track">🎵<span>music</span></button>
+        <button class="sndbtn" id="btnsfx" type="button" title="Join sounds">🔊<span>sfx</span></button>
+      </div>
+      <div id="navhost"></div>
+    </div>
+  </header>
+
+  <main>
+    <aside class="bezel qrcard shimmer"><div class="core">
+      <span class="eyebrow"><span class="dot"></span>Scan to join</span>
+      <div class="qrpanel"><img id="qr" src="img/qr-join.png" alt="QR code to join the game"></div>
+      <div class="qrurl" id="joinurl">popcat-event.vercel.app</div>
+      <div class="qrhint">Open the camera<br>Point it here<br>Name · ID · Department</div>
+      <img class="qrcat" src="img/popcat-closed.png" alt="" aria-hidden="true">
+    </div></aside>
+
+    <section class="bezel field"><div class="core">
+      <i class="rim" aria-hidden="true"></i>
+      <i class="flare" id="flare" aria-hidden="true"></i>
+      <div id="bubbles"></div>
+      <div id="empty">
+        <img src="img/popcat-open.png" alt="">
+        <h2>Waiting for players</h2>
+        <p>Scan the code to get in</p>
+      </div>
+    </div></section>
+  </main>
+
+  <div class="bottom"><div id="depts"></div></div>
+</div>
+
+<!-- config.js already loaded in <head> so the board request could start there -->
+<script src="sb.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+
+$('#evtname').textContent = CFG.EVENT_NAME;
+$('#joinurl').textContent = CFG.JOIN_URL || location.host;
+mountNav('#navhost', 'lobby');
+
+/* ── sound: the lobby owns the room while people file in ─────────────── */
+Snd.init({ musicDefault: true });
+const bMusic = $('#btnmusic'), bSfx = $('#btnsfx');
+function paintSnd() {
+  bMusic.className = 'sndbtn ' + (Snd.music ? 'on' : 'off');
+  bSfx.className = 'sndbtn ' + (Snd.sfx ? 'on' : 'off');
+}
+bMusic.onclick = () => { Snd.setMusic(!Snd.music); paintSnd(); };
+bSfx.onclick = () => { Snd.setSfx(!Snd.sfx); paintSnd(); };
+paintSnd();
+
+/* ── department colour ────────────────────────────────────────────────
+   Position in the configured list decides the hue, so a department is the
+   same colour every time the page loads and two neighbours in the list are
+   never neighbours on the wheel. Anyone whose stored department has since
+   been removed from the list still gets a stable colour from their name. */
+const DEPTS = (CFG.DEPARTMENTS || []);
+function hashStr(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return Math.abs(h);
+}
+/* The full 360 wheel sent GTC, PLANNING and FA LAB to cyan -- the one colour
+   this room cannot read as Halloween. So the golden angle now walks a hue
+   BUDGET instead of the whole wheel: ember->gold->yellow, toxic green,
+   violet->magenta, blood red.
+   Departments are dealt ROUND-ROBIN across the arcs, not proportionally to arc
+   width -- proportional put 13 of 25 departments in violet and they stopped
+   being tellable apart. The golden angle then places each one inside its arc,
+   so neighbours in the list are still far apart. */
+const HUE_ARCS = [[16, 46], [72, 28], [270, 58], [332, 32]];
+const PHI = 0.6180339887;
+const hueCache = new Map();
+function deptHue(d) {
+  const key = d || '—';
+  let h = hueCache.get(key);
+  if (h === undefined) {
+    const i = DEPTS.indexOf(key);
+    const k = i >= 0 ? i : DEPTS.length + (hashStr(key) % 97);
+    const [start, span] = HUE_ARCS[k % HUE_ARCS.length];
+    // Spread by position INSIDE the arc, not by k. Stepping k by 4 made
+    // 137.508*4 land within 2deg of a multiple of the arc width, which
+    // squeezed seven departments into 50-60deg of a 46deg arc.
+    const j = Math.floor(k / HUE_ARCS.length);
+    h = Math.round((start + (j * PHI * span) % span) % 360);
+    hueCache.set(key, h);
+  }
+  return h;
+}
+
+/* ── the bubble field ─────────────────────────────────────────────────── */
+const FIELD = $('#bubbles'), EMPTY = $('#empty');
+// PACK is the fill fraction the relaxation solver can always resolve, so the
+// density target alone sets the radius. There is deliberately NO minimum: a
+// floor clamps the radius LARGER than the field can hold, which is exactly what
+// produced a 10px overlap at 150 players on a 390px screen. Bubbles shrink
+// instead — a small bubble reads, a pile-up does not.
+// RMAX only binds below ~16 players, which is exactly the state the lobby spends
+// most of its life in: a handful of early arrivals must still fill the field
+// rather than read as a stray clump in one corner.
+const PACK = 0.55, RMAX = 150, GAP = 4;
+// how many arrivals in one poll get the full summoning, and how far apart
+const SUMMON_MAX = 4, SUMMON_GAP = 260;
+let F = { w: 0, h: 0 }, R = 40;
+const byId = new Map();
+let bubbles = [];
+
+function measure() {
+  const w = FIELD.clientWidth, h = FIELD.clientHeight;
+  if (w === F.w && h === F.h) return false;
+  F = { w, h };
+  return true;
+}
+
+function sizeEl(b) {
+  const d = b.r * 2;
+  b.el.style.width = b.el.style.height = d.toFixed(1) + 'px';
+  const showDept = b.r >= 40;
+  const base = b.r * (showDept ? 0.30 : 0.34);
+  // shrink a long name before resorting to an ellipsis nobody can read
+  const len = Math.max(1, Array.from(b.name || '').length);
+  const fit = (b.r * 1.80) / (len * 0.58);
+  b.nm.style.fontSize = Math.max(7, Math.min(base, fit)).toFixed(1) + 'px';
+  b.dp.style.display = showDept ? '' : 'none';
+  if (showDept) b.dp.style.fontSize = Math.max(6, b.r * 0.15).toFixed(1) + 'px';
+
+  /* The held size of an arrival has to be a PIXEL target, not a multiplier.
+     A bubble's radius shrinks as the lobby fills, so a fixed 2x would be a
+     wall at 10 players and unreadable at 150 — the point of the hold is that
+     somebody across the room can read the name, and that is measured in
+     pixels on the projector, not in multiples of a shrinking disc. */
+  const hero = Math.min(230, Math.max(120, F.h * 0.42));
+  const k = Math.max(1.35, Math.min(3.8, hero / Math.max(1, d)));
+  b.el.style.setProperty('--pops', k.toFixed(2));
+}
+
+function clampIn(b) {
+  if (F.w <= b.r * 2) b.x = F.w / 2;
+  else if (b.x < b.r) { b.x = b.r; if (b.vx < 0) b.vx = -b.vx; }
+  else if (b.x > F.w - b.r) { b.x = F.w - b.r; if (b.vx > 0) b.vx = -b.vx; }
+  if (F.h <= b.r * 2) b.y = F.h / 2;
+  else if (b.y < b.r) { b.y = b.r; if (b.vy < 0) b.vy = -b.vy; }
+  else if (b.y > F.h - b.r) { b.y = F.h - b.r; if (b.vy > 0) b.vy = -b.vy; }
+}
+
+// The room sees the FIRST painted frame after someone joins. Letting the
+// physics loop untangle a fresh spawn means a visible pile-up for however many
+// frames the projector needs, so resolve the packing here, synchronously.
+function settle(iters) {
+  const n = bubbles.length;
+  if (!n) return;
+  if (n === 1) { clampIn(bubbles[0]); return; }
+  for (let k = 0; k < iters; k++) {
+    let moved = 0;
+    for (let i = 0; i < n; i++) {
+      const a = bubbles[i];
+      for (let j = i + 1; j < n; j++) {
+        const c = bubbles[j];
+        let dx = c.x - a.x, dy = c.y - a.y;
+        const md = a.r + c.r + GAP;
+        const d2 = dx * dx + dy * dy;
+        if (d2 >= md * md) continue;
+        let d = Math.sqrt(d2);
+        if (d < 0.001) { const ang = Math.random() * Math.PI * 2; dx = Math.cos(ang); dy = Math.sin(ang); d = 0.001; }
+        const push = (md - d) / 2, ux = dx / d, uy = dy / d;
+        a.x -= ux * push; a.y -= uy * push;
+        c.x += ux * push; c.y += uy * push;
+        if (push > moved) moved = push;
+      }
+    }
+    for (let i = 0; i < n; i++) clampIn(bubbles[i]);
+    if (moved < 0.3) break;
+  }
+}
+
+// one shared number for every bubble, so the field is always full but never
+// packed tighter than it can be read
+function applySize() {
+  const n = bubbles.length;
+  if (!n) return;
+  const area = Math.max(1, F.w * F.h);
+  let r = Math.sqrt((area * PACK) / (n * Math.PI));
+  r = Math.min(r, RMAX);
+  r = Math.min(r, Math.max(10, Math.min(F.w, F.h) / 2.2));
+  R = r;
+  for (const b of bubbles) { b.r = r; sizeEl(b); clampIn(b); b.px = b.py = null; }
+  settle(70);
+  draw();
+}
+
+/* Six hand-lit glass creatures. Which one a player gets is hashed from their
+   id, not random: sync() re-reads the roster every poll, and a random pick
+   would reshuffle the whole room's characters on every refresh. */
+const CREATURES = ['cat-wide', 'pumpkin-grin', 'ghost-hat', 'pumpkin-tall', 'cat-wink', 'cat-stack'];
+function creatureFor(id) {
+  const s = String(id || '');
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return CREATURES[(h >>> 0) % CREATURES.length];
+}
+
+/* Warm the six sprites before anyone arrives. They total about a megabyte,
+   and a projector that has to decode a 180KB PNG at the exact moment the
+   first person joins shows a hole where the creature should be.
+   LOW priority, though: this used to be a plain eager fetch and the comment
+   here claimed it "costs nothing anybody sees" -- measured on production it
+   cost 2.5 SECONDS, starving the first get_board to 4983ms (vs 2440ms on the
+   board, which preloads one image). Nobody can see a creature before the
+   player list it belongs to has arrived, so these always deserve to queue
+   behind that request. */
+for (const c of CREATURES) {
+  const i = new Image();
+  i.fetchPriority = 'low';
+  i.src = 'img/glass/' + c + '.png';
+}
+
+function spawn(p, order) {
+  const el = document.createElement('div');
+  el.className = 'bub';
+  const bi = document.createElement('div'); bi.className = 'bi';
+  const aura = document.createElement('i'); aura.className = 'aura'; aura.setAttribute('aria-hidden', 'true');
+  const sp = document.createElement('img'); sp.className = 'sp';
+  sp.src = 'img/glass/' + creatureFor(p.id) + '.png';
+  sp.alt = ''; sp.decoding = 'async'; sp.draggable = false;
+  const plate = document.createElement('div'); plate.className = 'plate';
+  const nm = document.createElement('div'); nm.className = 'bn';
+  const dp = document.createElement('div'); dp.className = 'bd';
+  nm.textContent = p.username || '—';
+  dp.textContent = p.department || '';
+  plate.append(nm, dp);
+  bi.append(aura, sp, plate); el.append(bi);
+  el.style.setProperty('--h', deptHue(p.department));
+
+  const ang = Math.random() * Math.PI * 2;
+  const sp2 = 11 + Math.random() * 15;
+  const b = {
+    id: p.id, name: p.username || '—', dept: p.department || '',
+    x: F.w * (0.12 + Math.random() * 0.76),
+    y: F.h * (0.12 + Math.random() * 0.76),
+    vx: Math.cos(ang) * sp2, vy: Math.sin(ang) * sp2, sp: sp2,
+    r: R, el, bi, nm, dp, px: null, py: null
+  };
+  sizeEl(b); clampIn(b);
+  el.style.transform = 'translate3d(' + (b.x - b.r).toFixed(1) + 'px,' + (b.y - b.r).toFixed(1) + 'px,0)';
+  FIELD.append(el);
+
+  /* Stagger a burst. Four people can land between two polls, and four
+     simultaneous summonings is a strobe, not a moment — so they arrive in
+     sequence. Past the fourth the wait would outlast the animation itself, so
+     the rest simply appear; a mass join is already self-evidently a crowd.
+     order < 0 means "this is the first paint, nobody arrived" — see sync(). */
+  if (order >= 0 && order < SUMMON_MAX) {
+    const delay = order * SUMMON_GAP;
+    el.style.setProperty('--sumdelay', delay + 'ms');
+    el.classList.add('in');
+    setTimeout(() => el.classList.remove('in'), delay + 2500);
+    setTimeout(() => { Snd.joinPop(); fieldFlare(); }, delay);
+  }
+  return b;
+}
+
+/* The field edge answers an arrival. Opacity-only on a pre-painted layer, and
+   driven by WAAPI so a second arrival restarts it cleanly instead of needing a
+   class-removal reflow.
+   easing lives on the KEYFRAMES, never in the options object: an options-level
+   easing is applied to overall progress BEFORE offsets are looked up, which on
+   the leaderboard silently squashed a 2s sequence into its first 600ms. */
+const FLARE = $('#flare');
+let flareAnim = null;
+function fieldFlare() {
+  if (!FLARE) return;
+  if (flareAnim) flareAnim.cancel();
+  flareAnim = FLARE.animate([
+    { opacity: 0,   easing: 'cubic-bezier(.16,.9,.3,1)' },
+    { opacity: 1,   offset: .09, easing: 'cubic-bezier(.4,0,.55,1)' },
+    { opacity: .28, offset: .42, easing: 'ease-out' },
+    { opacity: 0 }
+  ], { duration: 1100, easing: 'linear', fill: 'none' });
+}
+
+function sim(dt) {
+  const n = bubbles.length;
+  for (let i = 0; i < n; i++) { const b = bubbles[i]; b.x += b.vx * dt; b.y += b.vy * dt; }
+
+  for (let pass = 0; pass < 2; pass++) {
+    for (let i = 0; i < n; i++) {
+      const a = bubbles[i];
+      for (let j = i + 1; j < n; j++) {
+        const c = bubbles[j];
+        const dx = c.x - a.x, dy = c.y - a.y;
+        const md = a.r + c.r + GAP;
+        const d2 = dx * dx + dy * dy;
+        if (d2 >= md * md) continue;
+        const d = Math.sqrt(d2);
+        // dead-centre overlap has no direction to push along; pick one
+        const ux = d > 0.001 ? dx / d : 1, uy = d > 0.001 ? dy / d : 0;
+        const push = (md - (d > 0.001 ? d : 0)) / 2;
+        a.x -= ux * push; a.y -= uy * push;
+        c.x += ux * push; c.y += uy * push;
+        const an = a.vx * ux + a.vy * uy, cn = c.vx * ux + c.vy * uy;
+        if (an > cn) {
+          const t = an - cn;
+          a.vx -= t * ux; a.vy -= t * uy;
+          c.vx += t * ux; c.vy += t * uy;
+        }
+      }
+    }
+    for (let i = 0; i < n; i++) clampIn(bubbles[i]);
+  }
+
+  // collisions bleed energy; without this the field silently freezes solid
+  for (let i = 0; i < n; i++) {
+    const b = bubbles[i];
+    const s = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+    if (s < 0.0001) { const a = Math.random() * Math.PI * 2; b.vx = Math.cos(a) * b.sp; b.vy = Math.sin(a) * b.sp; }
+    else { const k = b.sp / s; b.vx *= k; b.vy *= k; }
+  }
+}
+
+function draw() {
+  for (const b of bubbles) {
+    const x = Math.round((b.x - b.r) * 10) / 10, y = Math.round((b.y - b.r) * 10) / 10;
+    if (x !== b.px || y !== b.py) {
+      b.px = x; b.py = y;
+      b.el.style.transform = 'translate3d(' + x + 'px,' + y + 'px,0)';
+    }
+  }
+}
+
+let last = 0, simT = 0;
+/* The bubbles drift at 11-26 px/s, i.e. well under one pixel per 60Hz frame, so
+   simulating twice as often buys nothing a human can see. Stepping at ~30Hz
+   halves both the O(n^2) resolve and the 150 transform writes that follow it.
+   A/B'd capped-vs-uncapped at 150 players, 3 interleaved reps each:
+   cpu 78.4% -> 52.8%, script 64 -> 29ms/s, style 270 -> 144ms/s, and frame
+   pacing IDENTICAL (16.7ms p50, 0 long frames both ways). So the cap costs
+   nothing on screen and removes a third of the projector's CPU. Painting still
+   happens at the display's own rate — only the physics is throttled. */
+const SIM_MS = 33;
+function frame(t) {
+  requestAnimationFrame(frame);
+  if (measure()) applySize();
+  if (!bubbles.length) { last = 0; return; }
+  if (t - simT < SIM_MS) return;
+  // a backgrounded tab resumes with a huge gap; integrating it would teleport
+  const dt = Math.min(0.05, last ? (t - last) / 1000 : 0.016);
+  last = t; simT = t;
+  sim(dt); draw();
+}
+
+/* ── roster ───────────────────────────────────────────────────────────── */
+function renderDepts(list) {
+  const host = $('#depts');
+  const m = new Map();
+  for (const p of list) {
+    const d = p.department || '—';
+    m.set(d, (m.get(d) || 0) + 1);
+  }
+  const all = Array.from(m, ([d, n]) => ({ d, n }))
+    .sort((a, b) => b.n - a.n || a.d.localeCompare(b.d));
+  const top = all.slice(0, 6);
+  const max = Math.max(1, ...top.map(x => x.n));
+
+  host.textContent = '';
+  for (const x of top) {
+    const el = document.createElement('div');
+    el.className = 'dept shimmer';
+    el.style.setProperty('--h', deptHue(x.d));
+    el.style.setProperty('--p', (x.n / max).toFixed(3));
+    const fill = document.createElement('div'); fill.className = 'fill';
+    const dr = document.createElement('div'); dr.className = 'dr';
+    const dot = document.createElement('span'); dot.className = 'dot';
+    const dn = document.createElement('span'); dn.className = 'dn'; dn.textContent = x.d;
+    const dc = document.createElement('b'); dc.className = 'dc'; dc.textContent = x.n;
+    dr.append(dot, dn, dc); el.append(fill, dr);
+    host.append(el);
+  }
+
+  const restT = all.length - top.length;
+  const box = $('.bottom');
+  let more = box.querySelector('.more');
+  if (restT > 0) {
+    if (!more) { more = document.createElement('div'); more.className = 'more'; box.append(more); }
+    more.textContent = '+' + restT + ' more';
+  } else if (more) more.remove();
+}
+
+let lastCount = -1;
+let handedOver = false;
+/* The projector sits on this page while people join, so START has to move the
+   room by itself — otherwise the race (and the grand countdown that sells it)
+   runs while the big screen still shows a lobby.
+   The test is "a round that has not finished yet", NOT "a round exists": a
+   finished round leaves ends_at set in the past, and redirecting on that would
+   bounce the lobby to the board the moment it opened. */
+function checkHandover(board) {
+  if (handedOver || !board || !board.ends_at) return false;
+  if (serverNow() >= Date.parse(board.ends_at)) return false;
+  handedOver = true;
+  location.replace('/leaderboard');
+  return true;
+}
+
+function sync(board) {
+  const list = (board && board.top) || [];
+  const seen = new Set();
+  let added = 0, removed = 0;
+
+  /* First paint is not an arrival. Opening the projector on a lobby that
+     already holds sixty people must not summon sixty creatures at once — they
+     were already here. Only growth after the first successful poll is a join. */
+  const firstPaint = lastCount < 0;
+
+  for (const p of list) {
+    if (!p || !p.id) continue;
+    seen.add(p.id);
+    const cur = byId.get(p.id);
+    if (!cur) {
+      const b = spawn(p, firstPaint ? -1 : added);
+      byId.set(p.id, b); bubbles.push(b);
+      added++;
+    } else {
+      const nm = p.username || '—', dp = p.department || '';
+      if (cur.name !== nm) { cur.name = nm; cur.nm.textContent = nm; sizeEl(cur); }
+      if (cur.dept !== dp) {
+        cur.dept = dp; cur.dp.textContent = dp;
+        cur.el.style.setProperty('--h', deptHue(dp));
+      }
+    }
+  }
+  for (const [id, b] of Array.from(byId)) {
+    if (!seen.has(id)) { b.el.remove(); byId.delete(id); removed++; }
+  }
+  if (removed) bubbles = bubbles.filter(b => byId.has(b.id));
+  if (added || removed) applySize();
+
+  const n = list.length;
+  EMPTY.hidden = n > 0;
+  if (n !== lastCount) {
+    $('#count').textContent = n;
+    if (n > lastCount && !firstPaint) {
+      const t = $('#tally');
+      t.classList.add('bump');
+      setTimeout(() => t.classList.remove('bump'), 520);
+      // the arrival sound belongs to the creature, and spawn() fires it in
+      // step with that creature's own stagger delay
+    }
+    lastCount = n;
+    renderDepts(list);
+  }
+}
+
+/* ── polling: nothing here is time-critical, so keep it cheap ─────────── */
+let gap = 1500;
+(async function loop() {
+  for (;;) {
+    try {
+      const t0 = performance.now();
+      const board = (await firstBoard()) || (await rpc('get_board', { p_limit: 400 }));
+      if (checkHandover(board)) return;
+      sync(board);
+      const lat = performance.now() - t0;
+      // hidden projector, or a slow DB, should not keep hammering
+      gap = document.hidden ? 5000 : Math.max(1200, Math.min(4000, 900 + lat * 2));
+    } catch {
+      gap = Math.min(8000, gap * 1.6);
+    }
+    await new Promise(r => setTimeout(r, gap));
+  }
+})();
+addEventListener('visibilitychange', () => { if (!document.visibilityState.startsWith('h')) gap = 1200; });
+
+measure();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

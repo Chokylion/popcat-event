@@ -1,0 +1,1784 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#08060f">
+<title>Kaizen Pop-Cat — Leaderboard</title>
+<link rel="preconnect" href="https://YOUR-PROJECT.supabase.co" crossorigin>
+<script>
+/* The first get_board is by far the longest pole on this page: measured on
+   production it takes 0.7-3.0s (Supabase cold start) and it used to not even
+   START until ~650ms, because it waited for the stylesheet, the fonts, both
+   script tags and DOMContentLoaded. The request needs none of those -- it is
+   pure network -- so it is fired here, from <head>, before anything else is
+   even parsed. Nothing is rendered any later; the board simply stops sitting
+   empty waiting for a request it could have made half a second earlier.
+   Consumed by firstBoard() in sb.js, which also picks the clock skew out of it.
+
+   THIS SCRIPT MUST STAY ABOVE EVERY <link rel="stylesheet">.
+   A parser-inserted script cannot execute until all preceding stylesheets have
+   loaded, so with style.css above it the RPC was still starting within 3-8ms
+   of style.css finishing -- 993/1017/1497/3125ms across four production reps,
+   i.e. the whole "fire it early" fix was silently doing nothing. Measured
+   after the move: see the table in the commit. Put a <link> above this and the
+   regression comes straight back with no visible symptom.
+
+   WHY THE URL AND KEY ARE LITERALS INSTEAD OF CFG.*
+   Reading them from config.js put a whole serial round trip in front of the
+   request: measured on production, get_board started at 822ms on a good run
+   and 2614ms on a slow one, purely waiting for a 1KB script. The anon key is
+   public by design (every table is RLS-denied, all access goes through RPCs),
+   so it costs nothing to state it here -- but two copies can drift, so the
+   check right after config.js loads shouts if they ever do, and qaprod.mjs
+   fails the build on any console error. */
+var B0U = 'https://YOUR-PROJECT.supabase.co', B0K = 'YOUR-SUPABASE-ANON-KEY';
+window.__board0 = fetch(B0U + '/rest/v1/rpc/get_board', {
+  method: 'POST',
+  headers: { apikey: B0K, Authorization: 'Bearer ' + B0K,
+             'Content-Type': 'application/json' },
+  body: JSON.stringify({ p_limit: 40 })
+}).then(r => r.ok ? r.json() : null)
+  // stamp ARRIVAL, not consumption: this reply may sit here for seconds while
+  // the rest of the page boots, and skew is what the countdown clock runs on
+  .then(b => { window.__board0t = Date.now(); return b; })
+  .catch(() => null);
+</script>
+<link rel="stylesheet" href="style.css">
+<!-- No preload for the header cat: it is decorative, it is already in an <img>
+     tag further down, and as a 287KB as=image preload it outranked config.js
+     and the first get_board. Measured on production it finished 1380ms in,
+     while the RPC the screen actually waits for could not even start until
+     822ms. Decorative pixels never go in front of the data. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" media="print" onload="this.media='all'"
+      href="https://fonts.googleapis.com/css2?family=Anton&family=Space+Grotesk:wght@400;500;600;700&display=swap">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>">
+<script src="config.js"></script>
+<script>
+if (CFG.SUPABASE_URL !== B0U || CFG.SUPABASE_ANON_KEY !== B0K)
+  console.error('head prefetch credentials disagree with config.js');
+</script>
+<style>
+  body{overflow:hidden}
+  #app{
+    /* the FINAL RESULT banner is fixed to the floor, so the board gives up
+       exactly its height instead of letting it sit on top of the team strip */
+    height:calc(100dvh - var(--bannerpad,0px));
+    display:grid;grid-template-rows:auto 1fr;gap:clamp(8px,1.3vh,18px);
+    padding:clamp(10px,2vh,24px) clamp(10px,2vw,28px);
+    transition:height .5s cubic-bezier(.32,.72,0,1)
+  }
+
+  /* ══ header ═══════════════════════════════════════════ */
+  header{display:flex;align-items:center;gap:clamp(8px,1.4vw,20px);flex-wrap:wrap}
+  .lockup{display:flex;align-items:center;gap:clamp(8px,1vw,14px);min-width:0}
+  .hcat{
+    width:clamp(38px,5vw,86px);flex:none;
+    filter:drop-shadow(0 6px 16px rgba(0,0,0,.7)) drop-shadow(0 0 30px rgba(255,122,26,.75));
+    animation:bob 5s ease-in-out infinite
+  }
+  @keyframes bob{50%{transform:translateY(-5px) rotate(-4deg)}}
+  .titles{min-width:0}
+  h1{
+    margin:0;font-size:clamp(20px,3.5vw,54px);line-height:.94;
+    background:linear-gradient(100deg,#fff 4%,var(--ember) 38%,var(--pumpkin) 62%,var(--witch));
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 6px 26px rgba(255,122,26,.35))
+  }
+  .subline{
+    display:flex;align-items:center;gap:.9em;margin-top:.35em;flex-wrap:wrap;
+    font-size:clamp(8px,.78vw,13px)
+  }
+  .subline .adi{font-size:inherit}
+  .subline .sep{width:1px;height:1.4em;background:var(--hair)}
+  .subline .live{
+    display:inline-flex;align-items:center;gap:.5em;color:var(--dim);
+    letter-spacing:.2em;text-transform:uppercase;font-weight:600
+  }
+  .subline .live i{width:5px;height:5px;border-radius:50%;background:var(--toxic);
+    box-shadow:0 0 9px var(--toxic);animation:blip 2.4s ease-in-out infinite}
+
+  #timer{
+    font-family:var(--font-display);font-size:clamp(24px,4.2vw,68px);font-variant-numeric:tabular-nums;
+    padding:.06em clamp(10px,1.1vw,20px);border-radius:18px;line-height:1.2;
+    background:var(--glass);border:1px solid var(--hair);box-shadow:var(--inset)
+  }
+  #timer.hot{
+    color:var(--blood);border-color:rgba(255,46,85,.6);
+    box-shadow:0 0 44px -10px rgba(255,46,85,.95), var(--inset);animation:tick 1s infinite
+  }
+  #timer.idle{
+    font-family:var(--font-ui);font-weight:600;
+    font-size:clamp(11px,1.3vw,20px);color:var(--dim);letter-spacing:.2em
+  }
+  @keyframes tick{50%{transform:scale(1.045)}}
+
+  .stats{display:flex;gap:clamp(8px,1.3vw,18px);margin-left:auto;align-items:center}
+  .stat{
+    text-align:right;line-height:1.05;padding:.5em .9em;border-radius:14px;
+    background:var(--glass-2);border:1px solid var(--hair-soft);box-shadow:var(--inset)
+  }
+  .stat b{
+    display:block;font-family:var(--font-display);font-size:clamp(16px,2.1vw,32px);
+    font-variant-numeric:tabular-nums
+  }
+  .stat span{font-size:clamp(7px,.72vw,11px);color:var(--dim);letter-spacing:.2em;text-transform:uppercase;font-weight:600}
+  .stat.pops b{color:var(--ember)}
+
+  /* ══ layout: hero race board + department strip ═══════════ */
+  main{display:grid;grid-template-rows:1fr auto;gap:clamp(8px,1.4vh,18px);min-height:0}
+  .bezel.panel{padding:5px;border-radius:26px;min-height:0;display:grid}
+  .bezel.panel > .core{
+    padding:clamp(9px,1.3vh,17px);display:grid;grid-template-rows:auto 1fr;
+    gap:clamp(6px,1vh,10px);min-height:0;border-radius:21px
+  }
+  .core h2{
+    margin:0;font-family:var(--font-ui);font-weight:700;
+    font-size:clamp(9px,.95vw,15px);letter-spacing:.28em;text-transform:uppercase;color:var(--dim);
+    display:flex;align-items:center;gap:.7em
+  }
+  .core h2 em{color:var(--ember);font-style:normal}
+  .core h2::after{content:"";flex:1;height:1px;background:var(--hair-soft)}
+  .list{position:relative;display:block;min-height:0;overflow:hidden}
+
+  /* ══ THE PASS — a broadcast lower-third, not a toast ══
+     This used to be a rounded pill with a border and a drop shadow: web
+     notification chrome, on a screen a whole room is watching. It is the same
+     information rebuilt as kinetic type over a soft scrim — tracked label,
+     hero name, victim — with no edge anywhere for the eye to read as a box.
+     It is anchored to the BOTTOM on purpose: fireOvt only fires for the top 5,
+     so the lanes people are actually watching stay uncovered while the type
+     says who just did it. That is also where a broadcast puts a name. */
+  .bezel.panel > .core{position:relative}
+  #ovt{position:absolute;left:0;right:0;bottom:0;z-index:45;pointer-events:none;opacity:0;
+    display:grid;justify-items:center;gap:clamp(1px,.35vh,5px);
+    padding:clamp(22px,5vh,64px) 4% clamp(7px,1.9vh,26px);
+    text-align:center}
+  /* the authentic lower-third device: a shading gradient the full width of the
+     panel, darkest at the floor and gone by the top. A small radial was not
+     enough — lane bars read straight through the victim line. This dims the
+     bottom lanes instead of erasing them, and still has no edge anywhere. */
+  #ovt::before{content:"";position:absolute;inset:0;z-index:-1;
+    background:linear-gradient(to top,rgba(7,4,12,.96) 0%,rgba(7,4,12,.93) 34%,
+      rgba(7,4,12,.72) 62%,rgba(7,4,12,.3) 84%,transparent 100%)}
+  /* Anton is unreadable at label size, so the micro-label is the UI face */
+  #ovtVerb{font-style:normal;font-family:var(--font-ui);font-weight:700;
+    font-size:clamp(10px,.72vw,15px);letter-spacing:.34em;text-indent:.34em;
+    color:var(--ember);text-shadow:0 0 18px rgba(255,150,40,.75)}
+  /* Anton carries no Thai glyphs, so a Thai name falls through to Noto Sans
+     Thai — that fallback is the mechanism, not a bug. line-height stays loose
+     and NOTHING on this line clips, or วรรณยุกต์ get sheared off the top. */
+  #ovtA{font-family:var(--font-display);
+    font-size:clamp(24px,3.3vw,60px);line-height:1.18;letter-spacing:.012em;
+    background:linear-gradient(100deg,#fff 0 34%,#fff8e0 43%,var(--ember) 50%,#fff8e0 57%,#fff 66%);
+    background-size:300% 100%;background-position:100% 0;
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 0 30px rgba(255,140,30,.6)) drop-shadow(0 5px 16px rgba(0,0,0,.65))}
+  #ovtPast{display:flex;align-items:baseline;gap:.5em;white-space:nowrap;
+    font-family:var(--font-ui);font-size:clamp(11px,.92vw,19px);color:var(--dim)}
+  #ovtPast i{font-style:normal;font-size:.82em;letter-spacing:.14em;color:rgba(160,148,198,.62)}
+  #ovtB{font-weight:700;color:rgba(255,255,255,.84);max-width:16ch;overflow:hidden;text-overflow:ellipsis}
+  /* taking the lead is the one moment that earns gold */
+  #ovt.lead #ovtVerb{color:#ffe7a8;letter-spacing:.38em;text-indent:.38em}
+  #ovt.lead #ovtA{
+    background:linear-gradient(100deg,#ffe9b0 0 34%,#fff 43%,#ffd257 50%,#fff 57%,#ffe9b0 66%);
+    background-size:300% 100%;background-position:100% 0;
+    -webkit-background-clip:text;background-clip:text;
+    filter:drop-shadow(0 0 42px rgba(255,200,90,.85)) drop-shadow(0 5px 16px rgba(0,0,0,.65))}
+
+  /* ── the race lanes ──
+     --fs is the row unit, set once per layout by JS. EVERY fixed column is sized
+     in --fs rather than em, because the podium rows run at 1.22em: em-sized
+     gutters made each lane a different width, so one shared comet position was
+     impossible and the poles drifted onto the names. */
+  #players{font-size:clamp(14px,1.5vw,30px);--fs:16px;--namew:calc(9.6*var(--fs));--tipw:4px}
+  /* the track is an EMPTY spacer cell. It exists purely to carve out a zone the
+     name and the stats can never enter, and it is the only thing we measure. */
+  #players .track{min-width:0;height:100%;pointer-events:none}
+  /* lanes are absolutely placed and moved ONLY by transform: rank changes ride the
+     compositor, so reordering never triggers layout and never janks. */
+  #players .row{
+    position:absolute;left:0;right:0;top:0;height:var(--h,56px);
+    transform:translate3d(0,var(--y,0px),0);
+    transition:transform .58s var(--spring),opacity .4s linear;
+    will-change:transform;contain:layout paint style;
+    display:grid;
+    grid-template-columns:
+      calc(2.6*var(--fs))              /* rank medal */
+      minmax(0,var(--namew))           /* name + dept */
+      minmax(0,1fr)                    /* THE TRACK — nothing else may enter */
+      auto                             /* live/s + peak/s */
+      calc(1.4*var(--fs))              /* overtake arrow */
+      calc(5.4*var(--fs));             /* score */
+    align-items:center;gap:clamp(8px,1vw,20px);padding:0 clamp(10px,1.1vw,20px);line-height:1.15;
+    overflow:hidden;border-radius:16px;
+    background:linear-gradient(90deg,rgba(255,255,255,.045),rgba(255,255,255,.012));
+    border:1px solid var(--hair-soft);box-shadow:var(--inset)}
+  #players .row > *{position:relative;z-index:1}
+  /* bar grows with scaleX (GPU) instead of width (paint); the comet tip is
+     counter-scaled so it keeps its true thickness at any fill level */
+  /* bar grows with scaleX (GPU) instead of width (paint). It now STARTS at the
+     track's left edge (--tl) instead of the row's, so no fill and no comet can
+     ever sit under the rank medal or the player's name. */
+  #players .row > .barfill{position:absolute;left:var(--tl,0px);top:0;bottom:0;width:var(--tw,100%);z-index:0;border-radius:14px;
+    transform:scaleX(var(--p,.03));transform-origin:left center;
+    transition:transform var(--glide,.7s) var(--spring);
+    background:linear-gradient(90deg,rgba(255,122,26,.42),rgba(255,193,77,.20) 55%,rgba(139,92,246,.08) 92%,transparent)}
+  /* comet tip lives OUTSIDE the scaled bar and glides on translate, so its glow
+     never smears and it stays razor sharp at any fill level */
+  #players .row > .tip{position:absolute;left:var(--tl,0px);top:16%;bottom:16%;width:var(--tipw);border-radius:4px;z-index:0;
+    transform:translate3d(var(--tx,0px),0,0);transition:transform var(--glide,.7s) var(--spring);will-change:transform;
+    background:linear-gradient(#fff,#ffd23a);box-shadow:0 0 18px 4px rgba(255,193,77,.85),0 0 6px 1px #fff}
+  /* opacity, not box-shadow: animating a 28px shadow blur re-rasterises the tip
+     every frame on every moving row */
+  #players .row.moving > .tip{animation:tippulse .5s ease-in-out infinite}
+  @keyframes tippulse{0%,100%{opacity:.72}50%{opacity:1}}
+  /* overtake flash — opacity only, driven by the Web Animations API (no reflow hack) */
+  #players .row > .flash{position:absolute;inset:0;z-index:0;opacity:0;pointer-events:none;border-radius:inherit}
+  #players .row > .flash.up{background:linear-gradient(90deg,rgba(124,255,178,.42),rgba(124,255,178,.06) 60%,transparent);
+    box-shadow:inset 0 0 0 2px rgba(124,255,178,.85),0 0 46px -4px rgba(124,255,178,.9)}
+  #players .row > .flash.down{background:linear-gradient(90deg,rgba(255,46,85,.38),rgba(255,46,85,.05) 60%,transparent);
+    box-shadow:inset 0 0 0 2px rgba(255,46,85,.7),0 0 36px -6px rgba(255,46,85,.75)}
+  /* light streak that rips across the lane on an overtake */
+  #players .row > .streak{position:absolute;top:-45%;bottom:-45%;left:-25%;right:-25%;z-index:2;opacity:0;
+    pointer-events:none;transform:translate3d(-70%,0,0);
+    background:linear-gradient(104deg,transparent 43%,rgba(255,255,255,.62) 50%,transparent 57%)}
+  #players .row > .streak.down{background:linear-gradient(104deg,transparent 43%,rgba(255,120,150,.45) 50%,transparent 57%)}
+  #players .row.p1 > .barfill{
+    background:linear-gradient(90deg,rgba(255,193,77,.58),rgba(255,122,26,.30) 60%,transparent);
+    box-shadow:inset 0 0 40px rgba(255,193,77,.45)}
+  #players .row.p2 > .barfill{background:linear-gradient(90deg,rgba(200,205,225,.34),rgba(255,255,255,.05) 70%,transparent)}
+  #players .row.p3 > .barfill{background:linear-gradient(90deg,rgba(205,127,50,.36),rgba(255,255,255,.04) 70%,transparent)}
+
+  /* ── rank medals ──────────────────────────────────────────────────────────
+     Metallic discs for the podium, a cool chip for the pack. The shimmer is a
+     ROTATING conic gradient (transform only), so the podium looks expensive but
+     costs nothing per frame — the disc is rasterised once and spun on the GPU. */
+  #players .rk{position:relative;z-index:1;font-family:var(--font-display);text-align:center;
+    color:var(--dim);font-variant-numeric:tabular-nums;contain:layout style}
+  #players .rk::before{content:"";position:absolute;left:50%;top:50%;width:1.72em;height:1.72em;z-index:-1;
+    transform:translate3d(-50%,-50%,0);border-radius:50%;
+    background:radial-gradient(circle at 34% 28%,rgba(255,255,255,.16),transparent 62%),rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.10)}
+  @keyframes medalspin{to{transform:translate3d(-50%,-50%,0) rotate(360deg)}}
+
+  /* the pack (4th and below) — cool violet chip, clearly a rung below the podium */
+  #players .row.pk .rk{color:#d7dcff}
+  #players .row.pk .rk::before{
+    background:radial-gradient(circle at 34% 28%,rgba(200,208,255,.22),transparent 62%),rgba(120,116,215,.18);
+    border-color:rgba(165,175,255,.36)}
+
+  /* podium: dark numerals on bright metal */
+  #players .row.p1 .rk,#players .row.p2 .rk,#players .row.p3 .rk{color:#2a1c06;text-shadow:none}
+  #players .row.p1 .rk::before{will-change:transform;animation:medalspin 7s linear infinite;
+    background:conic-gradient(from 210deg,#7a4b00,#ffd76b 18%,#fff6cf 32%,#ffc83d 48%,#8a5500 68%,#ffe08a 86%,#7a4b00);
+    border-color:rgba(255,236,170,.95);box-shadow:0 0 24px -2px rgba(255,190,60,.95)}
+  #players .row.p2 .rk::before{will-change:transform;animation:medalspin 9s linear infinite;
+    background:conic-gradient(from 210deg,#6d737f,#e9eef8 20%,#ffffff 33%,#c3cbd9 50%,#79808d 70%,#eef2fa 88%,#6d737f);
+    border-color:rgba(240,245,255,.95);box-shadow:0 0 20px -3px rgba(214,224,240,.85)}
+  #players .row.p3 .rk::before{will-change:transform;animation:medalspin 11s linear infinite;
+    background:conic-gradient(from 210deg,#6a3410,#e2954f 20%,#ffd9b0 34%,#cd7f32 50%,#7a3f14 70%,#f0a968 88%,#6a3410);
+    border-color:rgba(255,205,155,.9);box-shadow:0 0 20px -3px rgba(214,130,60,.85)}
+  #players .who{min-width:0;display:flex;flex-direction:column;justify-content:center;gap:.12em;line-height:1.02}
+  #players .nm{font-weight:800;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #players .dp{font-size:.46em;color:var(--dim);letter-spacing:.16em;text-transform:uppercase;font-weight:700;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* the score lerps every frame, so it must stay a CHEAP layer — its glow lives
+     on the lane behind it (static), never on the numerals themselves */
+  #players .sc{font-family:var(--font-display);font-variant-numeric:tabular-nums;color:var(--ember);
+    text-align:right;contain:layout style}
+  #players .row.p1 .sc{color:#ffe9a8}
+  #players .row.p2 .sc{color:#eef2fa}
+  #players .row.p3 .sc{color:#ffd3a6}
+  #players .mv{text-align:center;font-size:.74em;font-weight:900;opacity:0;transition:opacity .35s ease}
+  #players .mv.up{opacity:1;color:var(--up);text-shadow:0 0 14px var(--up),0 0 4px var(--up)}
+  #players .mv.down{opacity:1;color:var(--down);text-shadow:0 0 14px var(--down),0 0 4px var(--down)}
+
+  /* ── leader spotlight + podium identity ───────────────────────────────────
+     Each podium place gets its own metal: tinted lane, a bright left edge, a
+     matching comet tip. All static paint — only the sheen band moves. */
+  #players .row.p1{font-size:1.22em;border-color:rgba(255,193,77,.62);
+    background:linear-gradient(90deg,rgba(255,168,26,.20),rgba(255,255,255,.02));
+    box-shadow:var(--inset),0 0 34px -10px rgba(255,180,50,.75)}
+  #players .row.p2{border-color:rgba(214,224,240,.5);
+    background:linear-gradient(90deg,rgba(205,215,235,.13),rgba(255,255,255,.02));
+    box-shadow:var(--inset),0 0 26px -12px rgba(210,220,240,.6)}
+  #players .row.p3{border-color:rgba(205,127,50,.5);
+    background:linear-gradient(90deg,rgba(205,127,50,.15),rgba(255,255,255,.02));
+    box-shadow:var(--inset),0 0 26px -12px rgba(205,127,50,.6)}
+  #players .row.p2,#players .row.p3{font-size:1.08em}
+  /* bright metal edge down the left of each podium lane */
+  #players .row.p1::after,#players .row.p2::after,#players .row.p3::after{
+    content:"";position:absolute;left:0;top:0;bottom:0;width:3px;z-index:2;pointer-events:none;
+    border-radius:16px 0 0 16px}
+  #players .row.p1::after{background:linear-gradient(#fff6cf,#ffc83d 45%,#8a5500)}
+  #players .row.p2::after{background:linear-gradient(#ffffff,#c3cbd9 45%,#79808d)}
+  #players .row.p3::after{background:linear-gradient(#ffd9b0,#cd7f32 45%,#7a3f14)}
+  /* medal-matched comet tips */
+  #players .row.p2 > .tip{background:linear-gradient(#fff,#dfe6f5);
+    box-shadow:0 0 18px 4px rgba(214,224,240,.85),0 0 6px 1px #fff}
+  #players .row.p3 > .tip{background:linear-gradient(#ffe3c4,#cd7f32);
+    box-shadow:0 0 18px 4px rgba(214,130,60,.85),0 0 6px 1px #ffd9b0}
+  /* the pack still reads as a race, just cooler and quieter than the podium */
+  #players .row.pk{border-color:rgba(150,160,255,.22)}
+  #players .row.pk > .barfill{
+    background:linear-gradient(90deg,rgba(142,138,255,.52),rgba(139,92,246,.22) 62%,transparent)}
+  #players .row.pk > .tip{background:linear-gradient(#fff,#b9c0ff);
+    box-shadow:0 0 14px 3px rgba(150,150,255,.7),0 0 5px 1px #fff}
+
+  /* sheen rides the compositor: translating a narrow band beats animating
+     background-position, which repaints the whole leader row every frame */
+  #players .row.p1::before,#players .row.p2::before,#players .row.p3::before{
+    content:"";position:absolute;top:0;bottom:0;left:0;width:42%;z-index:0;pointer-events:none;
+    background:linear-gradient(105deg,transparent 34%,rgba(255,255,255,.14) 50%,transparent 66%);
+    transform:translate3d(-110%,0,0);will-change:transform;animation:sheen 3.4s linear infinite}
+  #players .row.p2::before{animation-duration:5s;opacity:.7}
+  #players .row.p3::before{animation-duration:6.2s;opacity:.55}
+  @keyframes sheen{to{transform:translate3d(340%,0,0)}}
+
+  /* ── two figures per racer: live (fire) + peak ── */
+  /* Every numeral gets a FIXED slot. The lerp rewrites these many times a second,
+     and a content-sized grid track would re-resolve the whole row on each digit
+     change — that is what made 5 fast players jank. */
+  #players .rates{display:flex;align-items:flex-end;gap:clamp(6px,.7vw,16px);contain:layout style}
+  .figure{display:flex;flex-direction:column;align-items:center;line-height:.9;width:calc(3.4*var(--fs));flex:none}
+  .figure b{font-family:var(--font-display);font-variant-numeric:tabular-nums;font-size:1.02em;
+    display:block;width:100%;text-align:center;contain:layout style}
+  .figure i{font-size:.32em;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);font-style:normal;font-weight:800;margin-top:.35em}
+  .figure.peak b{color:#ffdf6e;text-shadow:0 0 16px rgba(255,193,77,.55)}
+  .figure.live b{color:var(--dim);transition:color .2s}
+
+  /* live-cps fire tiers — step every 3: 3 / 6 / 9 / 12 / 15 clicks-per-sec.
+     These animate TRANSFORM ONLY. The old tiers animated `filter` and
+     `background-position` on gradient-clipped text, which forces a full glyph
+     repaint (plus two blur passes) every single frame, on every hot row — the
+     main reason a handful of fast players could stall the board.
+
+     DO NOT "fix" this again by swapping the scale for an opacity throb. The
+     glyphs also carry a static drop-shadow, and scaling a filtered element
+     does make the engine re-rasterise the blur — so it looks like a bug. It
+     was rewritten as an opacity pulse and A/B'd old-vs-new, 3 interleaved
+     reps at 100 players: cpu 75.6% -> 74.3%, style 233 -> 234ms/s, frame p95
+     50.1 -> 66.6ms, long frames 13 -> 16. That is no better than nothing (the
+     measured noise floor on this box is ~1% cpu), and p95 was worse. The board
+     spends ~75% of its time in engine style/paint no matter what these few
+     small numbers do. Real theory, no measurable effect — so the approved look
+     stays. */
+  @keyframes firepulse{50%{transform:scale(1.14)}}
+  .figure.live b{will-change:transform}
+  .figure.live.t1 b{color:#ffcf6e;text-shadow:0 0 10px rgba(255,180,80,.75)}
+  .figure.live.t2 b{color:#ff9a2e;text-shadow:0 0 16px rgba(255,140,40,.9)}
+  .figure.live.t3 b,.figure.live.t4 b,.figure.live.t5 b{
+    background:linear-gradient(92deg,#ff2a00,#ff8a00 38%,#ffd23a 62%,#ff6a00);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 0 10px rgba(255,80,0,.85))}
+  .figure.live.t4 b{filter:drop-shadow(0 0 14px rgba(255,60,0,.95));
+    animation:firepulse 1s ease-in-out infinite}
+  .figure.live.t5 b{filter:drop-shadow(0 0 17px rgba(255,70,0,1));
+    animation:firepulse .55s ease-in-out infinite}
+  .stat.rate b{color:var(--toxic)}
+
+  /* ══ Fastest-now panel (board header) ══ */
+  .boardhead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:.35em}
+  .heads{display:flex;align-items:center;gap:clamp(6px,.7vw,12px)}
+  .fastest.rec b{color:#ffd36b}
+  .fastest.rec.idle b{color:var(--dim)}
+  .fastest{display:flex;align-items:baseline;gap:.55em;padding:.32em .85em;border-radius:15px;
+    background:var(--glass-2);border:1px solid var(--hair-soft);box-shadow:var(--inset);
+    transition:border-color .3s,box-shadow .3s}
+  .fastest .flabel{font-size:clamp(8px,.72vw,12px);letter-spacing:.16em;text-transform:uppercase;
+    color:var(--dim);font-weight:800}
+  .fastest b{font-family:var(--font-display);font-size:clamp(17px,1.8vw,32px);
+    font-variant-numeric:tabular-nums;line-height:1;color:var(--ember)}
+  .fastest b i{font-style:normal;font-size:.5em;opacity:.55;margin-left:1px}
+  .fastest #fname{font-weight:800;font-size:clamp(11px,1.05vw,17px);color:#fff;
+    max-width:26vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .fastest.idle{opacity:.55}
+  .fastest.t1 b{color:#ffcf6e}
+  .fastest.t2 b{color:#ff9a2e}
+  .fastest.t3 b,.fastest.t4 b,.fastest.t5 b{
+    background:linear-gradient(92deg,#ff2a00,#ff8a00 38%,#ffd23a 62%,#ff6a00);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 0 9px rgba(255,80,0,.8))}
+  .fastest.t3,.fastest.t4,.fastest.t5{border-color:rgba(255,90,0,.5);
+    box-shadow:0 0 26px -6px rgba(255,90,0,.65),var(--inset)}
+  .fastest.t5 b{will-change:transform;animation:firepulse .6s ease-in-out infinite}
+
+  /* ══ department strip (bottom) — team live/s + top scorer + total ══ */
+  #depts{position:relative;height:clamp(60px,10vh,110px);min-height:0}
+  .dept{position:absolute;left:0;top:0;bottom:0;width:var(--w,16%);
+    transform:translate3d(var(--x,0px),0,0);
+    transition:transform .6s var(--spring),width .6s var(--spring),opacity .4s linear;
+    will-change:transform;contain:layout paint;
+    min-width:0;overflow:hidden;border-radius:15px;
+    background:var(--glass-2);border:1px solid var(--hair-soft);box-shadow:var(--inset);
+    display:flex;flex-direction:column;justify-content:center;gap:.2em;padding:.4em clamp(8px,.8vw,15px)}
+  .dept .barfill{position:absolute;left:0;top:0;bottom:0;width:100%;z-index:0;
+    transform:scaleX(var(--p,0));transform-origin:left center;
+    background:linear-gradient(90deg,rgba(255,122,26,.30),rgba(139,92,246,.08) 80%,transparent);
+    transition:transform var(--glide,.8s) var(--spring)}
+  .dept .dhead{position:relative;z-index:1;display:flex;align-items:baseline;justify-content:space-between;gap:.5em;min-width:0}
+  .dept .dn{font-weight:800;font-size:clamp(10px,1vw,17px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+  .dept .drate{flex:none;font-family:var(--font-display);font-variant-numeric:tabular-nums;font-weight:800;
+    font-size:clamp(11px,1.15vw,21px);line-height:1;color:var(--dim)}
+  .dept .drate i{font-style:normal;font-size:.55em;opacity:.55;margin-left:1px}
+  .dept .drate.t1{color:#ffcf6e;text-shadow:0 0 8px rgba(255,180,80,.7)}
+  .dept .drate.t2{color:#ff9a2e;text-shadow:0 0 12px rgba(255,140,40,.9)}
+  .dept .drate.t3,.dept .drate.t4,.dept .drate.t5{
+    background:linear-gradient(92deg,#ff2a00,#ff8a00 38%,#ffd23a 62%,#ff6a00);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 0 8px rgba(255,80,0,.8))}
+  .dept .drate.t5{will-change:transform;animation:firepulse .6s ease-in-out infinite}
+  .dept .dsub{position:relative;z-index:1;display:flex;align-items:baseline;justify-content:space-between;gap:.5em;min-width:0}
+  .dept .dtop{font-size:clamp(8px,.8vw,13px);color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+  .dept .dtop b{color:#ffdf9e;font-weight:800}
+  .dept .dt{flex:none;font-family:var(--font-display);font-variant-numeric:tabular-nums;
+    color:var(--ember);font-size:clamp(12px,1.25vw,23px);line-height:1}
+  .dept.d1{border-color:rgba(255,193,77,.55)}
+  .dept.d1 .dt{text-shadow:0 0 20px rgba(255,193,77,.7)}
+
+  /* ══ bottom strip: teams + the fastest-hands panel ══ */
+  .bottom{display:grid;grid-template-columns:minmax(0,1fr) clamp(190px,19vw,320px);
+    gap:clamp(8px,1vw,14px);align-items:stretch;min-width:0}
+  .speedwrap{position:relative;min-width:0;height:clamp(60px,10vh,110px);
+    display:flex;flex-direction:column;gap:.3em;overflow:hidden;
+    border-radius:15px;padding:.42em clamp(8px,.8vw,14px);
+    background:linear-gradient(120deg,rgba(255,122,26,.13),rgba(139,92,246,.07));
+    border:1px solid rgba(255,193,77,.30);box-shadow:var(--inset),0 0 30px -14px rgba(255,150,40,.85)}
+  .speedwrap h3{margin:0;display:flex;align-items:baseline;gap:.6em;min-width:0;
+    font-family:var(--font-ui);font-weight:800;font-size:clamp(7px,.68vw,11px);
+    letter-spacing:.2em;text-transform:uppercase;color:#ffd9a0}
+  .speedwrap h3 span{font-size:.88em;letter-spacing:.12em;color:var(--dim);font-weight:700;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+  #speed{flex:1;min-height:0;display:grid;grid-auto-rows:1fr;gap:3px}
+  .srow{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;
+    gap:.5em;min-width:0;padding:0 .35em;border-radius:8px;
+    transition:background .35s ease,opacity .35s ease}
+  .srow .sk{font-size:clamp(10px,.9vw,15px);width:1.75em;flex:none;
+    text-align:center;color:var(--dim);line-height:1}
+  .srow .sn{font-weight:800;font-size:clamp(9px,.9vw,15px);min-width:0;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .srow .sv{flex:none;font-family:var(--font-display);font-variant-numeric:tabular-nums;
+    font-size:clamp(11px,1.1vw,20px);line-height:1;color:var(--ember)}
+  .srow .sv i{font-style:normal;font-size:.55em;opacity:.55;margin-left:1px}
+  .srow.s1{background:linear-gradient(90deg,rgba(255,193,77,.20),transparent)}
+  .srow.s1 .sk{color:#ffe9a8}
+  .srow.s1 .sv{color:#ffdf6e;text-shadow:0 0 14px rgba(255,193,77,.6)}
+  .srow.s2 .sv{color:#eef2fa}
+  .srow.s3 .sv{color:#ffd3a6}
+  .srow.empty{opacity:.32}
+
+  /* final banner */
+  #banner{
+    position:fixed;inset:auto 0 0;z-index:60;text-align:center;padding:.85em;
+    font-family:var(--font-display);letter-spacing:.4em;
+    background:linear-gradient(90deg,var(--witch-deep),var(--pumpkin),var(--witch-deep));
+    color:#fff;font-size:clamp(11px,1.3vw,20px);
+    box-shadow:0 -14px 40px -14px rgba(255,122,26,.8)
+  }
+
+  @media (max-width:1100px){
+    #players{--namew:calc(8*var(--fs))}
+  }
+  /* ── phones & tablets: TWO-LINE LANES ────────────────────────────────────
+     One line could not hold a race. At 390px the track was 96px — 28% of the
+     lane — so ten racers sat ~9px apart and the gap you are trying to close was
+     invisible. It was worse just above that: between 561 and 820px --fs grows
+     with row height, and the fixed columns squeezed the track down to 74px.
+     So below 820px the lane now STACKS — identity on line 1, a near-full-width
+     track on line 2 (96px -> ~275px on a phone, ~480px on a tablet). The width
+     that frees up on line 1 pays for the department and the ▲▼, which had to be
+     hidden before. The board is also the screen a player checks in their hand,
+     so it still has to survive 375px. */
+  @media (max-width:820px){
+    #app{padding:8px 8px calc(8px + env(safe-area-inset-bottom))}
+    header{gap:8px}
+    .hcat{display:none}
+    #timer{order:3}
+    .stats{margin-left:auto;gap:6px}
+    .stats .stat{padding:.34em .6em;border-radius:11px}
+    #players .figure.peak{display:none}
+    #depts{display:none}
+    .boardhead{flex-wrap:wrap;gap:8px}
+    .heads{flex:1 1 100%;gap:8px}
+    .heads .fastest{flex:1 1 0;min-width:0;justify-content:center}
+    .fastest #fname,.fastest #rname{max-width:none;flex:0 1 auto}
+    /* the panel was sized from vh, which on a 667px phone left 7px per entry for
+       11px text — it clipped. Size it from its CONTENT instead, and cap it at
+       two entries (the #1 peak is already on the 🏆 chip above). */
+    .speedwrap{grid-column:1/-1;height:auto;padding:5px 8px;gap:2px}
+    #speed{flex:none;gap:3px;grid-auto-rows:15px}
+    #speed > :nth-child(n+3){display:none}
+    .srow{padding:0 .3em}
+    #players .row{
+      --r2:calc(.26*var(--h));      /* the race line */
+      --rgap:3px;
+      gap:var(--rgap) 7px;padding:3px 9px 5px;border-radius:13px;
+      grid-template-columns:
+        calc(2.3*var(--fs))          /* rank medal — spans BOTH lines */
+        minmax(0,1fr)                /* name + dept */
+        calc(1.2*var(--fs))          /* overtake arrow */
+        auto                         /* live/s */
+        calc(4.2*var(--fs));         /* score */
+      grid-template-rows:minmax(0,1fr) var(--r2);
+      grid-template-areas:
+        "rk who mv rates sc"
+        "rk track track track track"}
+    #players .rk{grid-area:rk}
+    #players .who{grid-area:who}
+    #players .mv{grid-area:mv}
+    #players .rates{grid-area:rates}
+    #players .sc{grid-area:sc}
+    #players .track{grid-area:track}
+    #players .dp{font-size:.5em;letter-spacing:.12em}
+    #players .figure{width:calc(3*var(--fs))}
+    /* the bar and the comet are absolutely positioned inside the ROW, not inside
+       the track cell, so they have to be pinned to the second line by hand —
+       otherwise they would stretch the full height and run behind the name. */
+    #players .row > .barfill{top:auto;bottom:5px;height:var(--r2);border-radius:8px}
+    #players .row > .tip{top:auto;bottom:5px;height:var(--r2)}
+  }
+  /* ── phones only: buy back vertical space for more lanes ── */
+  @media (max-width:560px){
+    h1{font-size:clamp(15px,5.2vw,22px)}
+    .subline{font-size:9px}
+    .subline .sep,.subline .live{display:none}   /* keep the ADI mark, drop the tagline */
+    #timer{font-size:clamp(17px,6vw,26px)}
+    .stats .stat:nth-child(2){display:none}
+    #app{gap:6px}
+    .boardhead{margin-bottom:.25em}
+    .flabel .lx{display:none}
+    .fastest{padding:.3em .6em;gap:.4em}
+    .fastest .flabel{white-space:nowrap}
+  }
+
+  /* ══ 3-2-1 countdown overlay ══ */
+  /* the two sound switches, small enough to stay out of the board's way */
+  .sndbar{display:flex;gap:6px;align-items:center}
+  .sndbtn{
+    display:flex;align-items:center;gap:.45em;cursor:pointer;
+    padding:.42em .72em;border-radius:10px;
+    border:1px solid var(--hair);background:var(--glass-2);color:var(--dim);
+    font-family:var(--font-ui);font-weight:700;font-size:clamp(9px,.72vw,12px);
+    letter-spacing:.14em;text-transform:uppercase;line-height:1;
+    transition:color .2s var(--spring),border-color .2s var(--spring),background .2s var(--spring)
+  }
+  .sndbtn span{opacity:.85}
+  .sndbtn.on{color:var(--ember);border-color:rgba(255,193,77,.45);
+    background:linear-gradient(180deg,rgba(255,193,77,.16),rgba(255,193,77,.05));
+    box-shadow:0 0 18px -6px rgba(255,193,77,.7)}
+  .sndbtn.off{opacity:.55}
+  /* a track cannot legally start before a gesture, so say so instead of
+     looking broken when the host clicks and hears nothing */
+  .sndbtn.needtap{animation:needtap 1.4s ease-in-out infinite}
+  @keyframes needtap{50%{border-color:var(--pumpkin);color:var(--pumpkin)}}
+
+  /* ══ THE COUNTDOWN ══════════════════════════════════════════════════════
+     The one moment the whole room looks up — so it is also the one state that
+     must not stutter. It used to earn a real full-screen blur on the theory
+     that nothing is moving behind it; measurement disagreed (see #cdveil). */
+  #cdveil{
+    position:fixed;inset:0;z-index:78;pointer-events:none;opacity:0;
+    /* Dark enough to bury the scoreboard WITHOUT a live blur -- see below. */
+    background:
+      radial-gradient(58% 58% at 50% 46%,rgba(76,29,149,.50),transparent 72%),
+      radial-gradient(120% 120% at 50% 50%,rgba(4,2,10,.88) 18%,rgba(3,1,8,.985) 78%);
+    /* Opacity transitions ON THE WAY OUT ONLY.
+       The fade-IN is gone because `#cd.show` sets opacity directly, so the
+       digit appears the instant the class lands while every transitioned
+       element waits for a frame. Measured on the production projector path:
+       the digit hit full opacity at 1940ms and the veil was STILL 0 at 2248ms
+       — 660ms of a giant number sitting on a bright, unburied scoreboard
+       before its own backdrop caught up. The backdrop is not decoration, it is
+       what makes the number legible, so it must never be late. It snaps on
+       with the digit and fades out gracefully. */
+    transition:opacity .5s var(--spring)
+  }
+  /* ── WHY THERE IS NO backdrop-filter HERE ANY MORE ─────────────────────
+     This used to be blur(18px) saturate(.72) brightness(.55) across the whole
+     1920x1080 frame. Paired A/B in one page (cdopenpair.mjs, 5 rounds,
+     round-robin with the order reversed on alternate rounds, real GPU):
+
+       base (live blur)            31.2ms/frame   32fps
+       same veil, no backdrop      21.6ms         46fps   1.44x
+       darker veil, no backdrop    20.2ms         50fps   1.54x
+
+     An earlier session established that blur RADIUS is free; what is not free
+     is a full-screen backdrop readback on a surface that recomposites every
+     frame. Stacking the other suspects on top only bought 19.5 / 18.6ms
+     (bloom, glyph glow) and 17.3ms only by deleting the rings, fog and cats —
+     i.e. the countdown itself. So this is the one change worth making.
+
+     Nothing is lost visually: the blur existed to stop the scoreboard behind
+     competing with the digit, and the board is frozen behind it anyway. A
+     wash at .985 does that job outright, and it does it on the FIRST frame
+     instead of after a filter ramp. */
+  #cdveil.show{opacity:1;transition:none}
+  /* Dropping the veil outright on GO! put toxic green on a bright board — the
+     loudest moment of the event was the least legible one. It steps back
+     instead of leaving, so the lanes bleed through while GO! still pops. */
+  #cdveil.go{opacity:.62}
+
+  /* ── WHY THE COUNTDOWN USED TO DROP FRAMES ─────────────────────────────
+     Measured, paired A/B inside one page (cdpair.mjs): the racing board ran
+     ~35fps and the countdown ran ~27fps -- the single moment the whole room is
+     watching was the worst-performing state on the board.
+
+     The obvious suspect was the full-screen blur, and it was WRONG. Halving
+     the blur radius to 10px was worth 0%. What actually cost:
+       - the giant digit's two chained drop-shadows   +10%
+       - the two cats' two chained drop-shadows        +6%
+       - the board still animating behind the veil    +22% (with the above)
+     A drop-shadow is a blur pass over the element's whole region. #cd is a
+     ~500px glyph and the outer shadow is a 90px blur, so its filter region is
+     enormous -- and cdpop/cdflick animate that element every frame, so the
+     whole region is re-rasterised every frame.
+
+     The fix is the same one already learned on the lobby rim: SEPARATE THE
+     THING THAT MOVES FROM THE THING THAT IS EXPENSIVE. The big soft bloom is
+     now a static pre-painted gradient that never animates, and the moving
+     glyph keeps only its tight inner glow. */
+  body.cd-on #app, body.cd-on #app *{animation-play-state:paused!important}
+
+  /* the bloom that used to be #cd's outer 90px drop-shadow. Fixed-position so
+     it is out of #cdstage's grid flow -- as a grid item it would create a
+     track and shove the digit off the rings' centre, which is exactly how
+     #cdsub broke this layout once before. */
+  #cdstage::before{
+    content:'';position:fixed;left:50%;top:50%;
+    width:min(86vh,74vw);height:min(86vh,74vw);
+    transform:translate3d(-50%,-50%,0);border-radius:50%;
+    background:radial-gradient(circle,rgba(255,46,85,.42),rgba(255,46,85,.16) 42%,transparent 68%);
+    opacity:0;transition:opacity .45s var(--spring);pointer-events:none;z-index:-1
+  }
+  body.cd-on #cdstage::before{opacity:1}
+  body.cd-go #cdstage::before{
+    background:radial-gradient(circle,rgba(157,255,77,.40),rgba(157,255,77,.15) 42%,transparent 68%)}
+
+  /* drifting graveyard fog — two slabs, transform-only, no filters */
+  #cdfog{position:fixed;inset:0;z-index:78;pointer-events:none;opacity:0;
+    transition:opacity .6s var(--spring);overflow:hidden}
+  #cdfog.show{opacity:1}
+  #cdfog i{
+    position:absolute;left:-40%;width:180%;height:46%;display:block;
+    background:radial-gradient(50% 60% at 50% 50%,rgba(139,92,246,.20),transparent 68%),
+               radial-gradient(38% 52% at 22% 46%,rgba(255,122,26,.12),transparent 70%);
+    will-change:transform
+  }
+  #cdfog i:nth-child(1){top:6%;animation:fogA 19s linear infinite}
+  #cdfog i:nth-child(2){bottom:2%;animation:fogB 25s linear infinite}
+  @keyframes fogA{from{transform:translate3d(-12%,0,0)}to{transform:translate3d(12%,0,0)}}
+  @keyframes fogB{from{transform:translate3d(10%,0,0)}to{transform:translate3d(-10%,0,0)}}
+
+  /* a summoning ring that winds up under the number */
+  #cdring{
+    position:fixed;left:50%;top:50%;width:min(80vh,70vw);height:min(80vh,70vw);
+    margin:calc(min(80vh,70vw) / -2) 0 0 calc(min(80vh,70vw) / -2);
+    z-index:79;pointer-events:none;border-radius:50%;opacity:0;
+    background:conic-gradient(from 0deg,transparent 0deg,rgba(255,122,26,.0) 190deg,
+      rgba(255,122,26,.6) 312deg,rgba(255,46,85,.95) 350deg,transparent 360deg);
+    -webkit-mask:radial-gradient(circle,transparent 62%,#000 63%,#000 68%,transparent 69%);
+    mask:radial-gradient(circle,transparent 62%,#000 63%,#000 68%,transparent 69%);
+    transition:opacity .45s var(--spring);will-change:transform
+  }
+  #cdring.show{opacity:1;animation:cdspin 1s linear infinite}
+  #cdring.go{animation:cdburst .75s cubic-bezier(.2,.9,.2,1) forwards}
+  @keyframes cdspin{to{transform:rotate(360deg)}}
+  @keyframes cdburst{
+    0%{transform:scale(1);opacity:1;filter:hue-rotate(0deg)}
+    100%{transform:scale(1.9);opacity:0;filter:hue-rotate(-90deg)}
+  }
+  /* ONE number drives the inner ring AND where the label sits. They used to be
+     sized independently, so at 390px the ring grew past the label and the two
+     collided — the same trap as the lane gutters: if two things must clear each
+     other, they have to derive from the same value, not from two guesses. */
+  :root{--cdring2:min(58vh,50vw)}
+  /* a second, slower counter-ring so the centre reads as a portal, not a clock */
+  #cdring2{
+    position:fixed;left:50%;top:50%;width:var(--cdring2);height:var(--cdring2);
+    margin:calc(var(--cdring2) / -2) 0 0 calc(var(--cdring2) / -2);
+    z-index:79;pointer-events:none;border-radius:50%;opacity:0;
+    border:2px dashed rgba(157,255,77,.30);
+    transition:opacity .45s var(--spring);will-change:transform
+  }
+  #cdring2.show{opacity:1;animation:cdspin2 7s linear infinite}
+  #cdring2.go{opacity:0}
+  @keyframes cdspin2{to{transform:rotate(-360deg)}}
+
+  /* the stage centres cat + number + cat as one group, so the digit can never
+     drift off-centre when the cats change size */
+  #cdstage{
+    position:fixed;inset:0;z-index:80;pointer-events:none;
+    /* place-CONTENT, not place-items. place-items centres each item inside its
+       own track; with auto rows the TRACKS still stack from the top, which
+       parked the whole countdown in the upper third of the projector. */
+    display:grid;place-content:center;justify-items:center;
+    grid-auto-rows:min-content;gap:clamp(4px,1vh,16px)
+  }
+  #cdrow{display:flex;align-items:center;justify-content:center;gap:clamp(6px,1.6vw,34px)}
+  .cdcat{
+    width:min(21vh,17vw);flex:none;opacity:0;
+    /* ONE drop-shadow, not two. These bob continuously (catL/catR, 1.6s
+       infinite), so every chained shadow is another full blur pass re-run on
+       every frame of that animation -- measured at 6% of the countdown's frame
+       budget for the dark contact shadow alone, which is invisible anyway
+       against a backdrop already darkened to brightness(.55). */
+    filter:drop-shadow(0 0 26px rgba(255,122,26,.85));
+    transition:opacity .4s var(--spring);will-change:transform
+  }
+  .cdcat.show{opacity:1}
+  .cdcat.l{animation:catL 1.6s ease-in-out infinite}
+  .cdcat.r{transform:scaleX(-1);animation:catR 1.6s ease-in-out infinite}
+  @keyframes catL{0%,100%{transform:translateY(0) rotate(-7deg)}50%{transform:translateY(-11px) rotate(3deg)}}
+  @keyframes catR{0%,100%{transform:scaleX(-1) translateY(0) rotate(-7deg)}
+                  50%{transform:scaleX(-1) translateY(-11px) rotate(3deg)}}
+  /* on a phone the cats would squeeze the digit — the digit always wins */
+  @media (max-width:820px){ .cdcat{display:none} }
+
+  #cd{
+    font-family:var(--font-display);font-size:min(48vh,40vw);line-height:.86;
+    letter-spacing:-.02em;opacity:0;
+    /* gradient-filled digits read far better on a projector than flat white.
+       NOTE: with background-clip:text the glow MUST be filter:drop-shadow —
+       text-shadow paints behind transparent glyphs and simply vanishes. */
+    background:linear-gradient(177deg,#fff 2%,var(--ember) 34%,var(--pumpkin) 68%,var(--blood) 99%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    /* Only the TIGHT glow stays on the animated glyph. The wide soft bloom that
+       used to be a second drop-shadow(0 0 90px) is now #cdstage::before, a
+       static gradient that never re-rasterises. Same look, one blur pass
+       instead of two over a ~500px glyph, every frame. */
+    filter:drop-shadow(0 0 30px rgba(255,122,26,.95));
+    will-change:transform
+  }
+  #cd.show{opacity:1;animation:cdpop .5s cubic-bezier(.2,.9,.2,1),cdflick 2.1s steps(1) infinite .5s}
+  #cd.go{
+    font-size:min(32vh,29vw);
+    background:linear-gradient(177deg,#eaffd0 2%,var(--toxic) 42%,#3fbf28 99%);
+    -webkit-background-clip:text;background-clip:text;
+    filter:drop-shadow(0 0 40px rgba(157,255,77,.95));
+    animation:cdpop .5s cubic-bezier(.2,.9,.2,1)
+  }
+  /* The pop animates TRANSFORM ONLY, and it starts at a size that is already
+     readable. Twice now a late first frame has frozen this element on its 0%
+     keyframe — once at opacity .15 (an invisible ghost) and once at scale .42
+     (a digit a quarter of its proper size on a 1920 projector). The rule both
+     times: the 0% keyframe is not a starting position, it is the worst thing
+     the audience might see, so it must still look right. */
+  @keyframes cdpop{0%{transform:scale(.78) rotate(-5deg)}
+    45%{transform:scale(1.07) rotate(1.5deg)}
+    100%{transform:scale(1) rotate(0)}}
+  /* a dying-fluorescent stutter — cheap, and it reads as haunted not broken */
+  @keyframes cdflick{0%,96%,100%{opacity:1}97%{opacity:.4}98%{opacity:1}99%{opacity:.6}}
+
+  /* GET READY, sitting under the number so the eye lands on the digit first.
+     Deliberately NOT a grid child: adding it to the centred stage made the grid
+     taller and pushed the digit off the rings' centre. Pinning it to the ring
+     radius keeps the digit exactly concentric at every size.
+     The font is bound by BOTH axes — sized on vh alone, 22 wide-tracked letters
+     ran edge-to-edge on a 390px phone with nowrap and no way to escape. */
+  #cdsub{
+    position:fixed;left:0;right:0;z-index:80;
+    top:calc(50% + var(--cdring2) * .5 + clamp(10px,1.7vh,26px));
+    text-align:center;pointer-events:none;opacity:0;white-space:nowrap;
+    font-family:var(--font-ui);font-weight:700;
+    font-size:clamp(9px,min(1.55vh,2.3vw),22px);
+    letter-spacing:clamp(.16em,.62vw,.62em);text-transform:uppercase;color:#ffc79a;
+    text-shadow:0 0 24px rgba(255,122,26,.9);transition:opacity .4s var(--spring)
+  }
+  #cdsub.show{opacity:.95}
+  @media (prefers-reduced-motion:reduce){
+    #cdring.show,#cdring2.show,#cd.show,.cdcat.l,.cdcat.r,#cdfog i{animation:none}
+  }
+</style>
+</head>
+<body class="noscroll">
+<div id="app">
+  <header>
+    <div class="lockup">
+      <img class="hcat" src="img/popcat-open.png" alt="" aria-hidden="true" fetchpriority="low">
+      <div class="titles">
+        <h1 id="evtname">KAIZEN POP-CAT</h1>
+        <div class="subline">
+          <img class="adi-logo" src="img/adi-logo.svg" alt="Analog Devices">
+          <span class="sep"></span>
+          <span class="live"><i></i>Halloween 2026 · Live</span>
+        </div>
+      </div>
+    </div>
+    <div id="timer" class="idle">WAITING</div>
+    <div class="sndbar">
+      <button class="sndbtn" id="btnmusic" type="button" title="Backing track">🎵<span>music</span></button>
+      <button class="sndbtn" id="btnsfx" type="button" title="Countdown sounds">🔊<span>sfx</span></button>
+    </div>
+    <div id="navhost"></div>
+    <div class="stats">
+      <div class="stat"><b id="tp">0</b><span>players</span></div>
+      <div class="stat pops"><b id="tc">0</b><span>total pops</span></div>
+      <div class="stat rate"><b id="tr">0</b><span>pops / sec</span></div>
+    </div>
+  </header>
+  <main>
+    <section class="bezel panel"><div class="core">
+      <div class="boardhead">
+        <h2>The Race <em>· live</em></h2>
+        <div class="heads">
+          <div id="fastest" class="fastest idle">
+            <span class="flabel">⚡ Fastest<span class="lx"> now</span></span>
+            <b id="fval">0<i>/s</i></b>
+            <span id="fname">waiting…</span>
+          </div>
+          <div id="record" class="fastest rec idle">
+            <span class="flabel">🏆 Peak<span class="lx"> click/s</span></span>
+            <b id="rval">0<i>/s</i></b>
+            <span id="rname">—</span>
+          </div>
+        </div>
+      </div>
+      <div class="list" id="players"></div>
+      <div id="ovt" aria-hidden="true">
+        <em id="ovtVerb">OVERTAKE</em>
+        <span id="ovtA"></span>
+        <div id="ovtPast"><i>แซง</i><span id="ovtB"></span></div>
+      </div>
+    </div></section>
+    <div class="bottom">
+      <div id="depts"></div>
+      <div class="speedwrap">
+        <h3>⚡ Fastest hands <span>peak click/s</span></h3>
+        <div id="speed"></div>
+      </div>
+    </div>
+  </main>
+</div>
+<div id="banner" hidden></div>
+<div id="cdveil" aria-hidden="true"></div>
+<div id="cdfog" aria-hidden="true"><i></i><i></i></div>
+<div id="cdring" aria-hidden="true"></div>
+<div id="cdring2" aria-hidden="true"></div>
+<div id="cdstage" aria-hidden="true">
+  <div id="cdrow">
+    <img class="cdcat l" src="img/popcat-open.png" alt="" fetchpriority="low">
+    <div id="cd"></div>
+    <img class="cdcat r" src="img/popcat-open.png" alt="" fetchpriority="low">
+  </div>
+  <div id="cdsub">the cats are waking up</div>
+</div>
+
+<!-- config.js already loaded in <head> so the board request could start there -->
+<script src="sb.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+const box = $('#players'), dbox = $('#depts');
+let endsAt = null, startsAt = null, prevScore = new Map(), wasLive = false, lastTotal = 0, seenStarts = null;
+let cps = new Map(), peak = new Map(), deptStats = new Map(), cpsTs = 0, prevMax = 1, cdVal = null, cdCounting = false;
+let cdPlan = null;      // {n, slice} — the beat schedule, fixed when the countdown is first seen
+let rawEnds = null;     // server round end, WITHOUT the EVENT_END fallback endsAt carries
+
+/* ── sound ──────────────────────────────────────────────────────────────
+   This screen owns the room's speakers, so the backing track defaults ON here
+   (phones default OFF — a hundred copies a second out of sync is just noise).
+   Autoplay still needs a gesture, so the button flags itself until it gets one
+   rather than sitting there looking switched on with silence coming out. */
+Snd.init({ musicDefault: true, volume: 0.4 });
+const bMusic = $('#btnmusic'), bSfx = $('#btnsfx');
+function paintSnd() {
+  bMusic.className = 'sndbtn ' + (Snd.music ? 'on' : 'off')
+    + (Snd.music && !Snd._armed ? ' needtap' : '');
+  bMusic.firstChild.nodeValue = Snd.music ? '🎵' : '🎶';
+  bSfx.className = 'sndbtn ' + (Snd.sfx ? 'on' : 'off');
+  bSfx.firstChild.nodeValue = Snd.sfx ? '🔊' : '🔇';
+}
+bMusic.onclick = () => { Snd.setMusic(!Snd.music); paintSnd(); };
+bSfx.onclick = () => { Snd.setSfx(!Snd.sfx); paintSnd(); };
+// the first click anywhere is what unblocks playback; repaint so the hint clears
+addEventListener('pointerdown', () => setTimeout(paintSnd, 60), { passive: true });
+paintSnd();
+
+/* ══════════════════════════════════════════════════════════════════════════
+   SMOOTH ENGINE
+   Rows and chips are created ONCE and never destroyed while their player is on
+   screen. Everything that moves is driven by transform/opacity only (compositor
+   thread), so reordering and bar growth cannot jank even while JS is busy.
+   Only the numerals are JS-driven, through a single shared rAF loop.
+   ══════════════════════════════════════════════════════════════════════════ */
+const rowMap = new Map(), deptMap = new Map(), gNums = [];
+/* MAXROWS is the hard cap the room ever sees; MINROW is what a lane needs to
+   stay readable. */
+const MINROW = 46, MAXROWS = 15, GAP = 8, DGAP = 10;
+let lastRowH = -1, lastW = -1, prevByRank = new Map(), bestOvt = null;
+let lastBoxW = -1, lastBoxH = -1, roBusy = false;
+let leadEl = null, trackW = 0, trackL = -1, fitRaf = 0, fitSettle = 0;
+const TIPW = 4;
+
+// One place that owns every size derived from a lane's height. --fs must respect
+// WIDTH as well: on a phone a tall row would otherwise pick a font so large that
+// the fixed columns eat the entire race track and the comet has nowhere to run.
+function applyRowMetrics(rowH) {
+  box.style.setProperty('--h', rowH.toFixed(1) + 'px');
+  const w = box.clientWidth || 600;
+  const units = innerWidth <= 560 ? 24 : innerWidth <= 820 ? 22 : 30;
+  const fs = Math.max(10, Math.min(30, Math.min(rowH * .40, w / units)));
+  box.style.setProperty('--fs', fs.toFixed(1) + 'px');
+  box.style.fontSize = fs.toFixed(1) + 'px';
+}
+
+const fInt  = v => num(Math.round(v));
+const fRate = v => v >= 10 ? String(Math.round(v)) : v >= 0.05 ? v.toFixed(1) : '0';
+
+function mkNum(el, fmt, eps, snap) {
+  return { el, fmt, eps: eps || .5, cur: 0, tgt: 0, on: false, last: null, snap: !!snap };
+}
+function putNum(o) { const s = o.fmt(o.cur); if (s !== o.last) { o.last = s; o.el.textContent = s; } }
+// Snapped numerals never animate their text. Rewriting text inside a glowing /
+// gradient-clipped element re-rasterises that layer, and doing it every frame on
+// every hot row was measurably the board's single biggest stall (36 long tasks
+// -> 0 when disabled). Glow lives on static layers; changing text stays cheap.
+function setNum(o, v) {
+  o.tgt = v;
+  if (o.snap) { if (o.cur !== v || !o.on) { o.on = true; o.cur = v; putNum(o); } return; }
+  if (!o.on) { o.on = true; o.cur = v; putNum(o); }
+}
+/* Under load the board used to snap into place in .7s and then sit perfectly
+   still for the rest of a multi-second gap. That stillness IS what reads as lag —
+   the data was arriving, nothing was moving. Stretching the glide to match the
+   gap we are actually achieving keeps the bars and numerals travelling the whole
+   time, and because they only ever move between two REAL polled values there is
+   no prediction here that could be wrong. */
+let numK = .16;
+function setGlide(gapMs) {
+  const g = Math.max(600, Math.min(2600, gapMs));
+  document.documentElement.style.setProperty('--glide', (g / 1000).toFixed(2) + 's');
+  // numerals step ~31x/s, so this is the per-step factor that lands them on the
+  // new value just about when the next poll replaces it
+  numK = Math.max(.03, Math.min(.22, 3 / (31.25 * g / 1000)));
+}
+
+function stepNums(list) {
+  for (const o of list) {
+    if (!o.on || o.snap) continue;
+    const d = o.tgt - o.cur;
+    if (Math.abs(d) < o.eps) { if (o.cur !== o.tgt) { o.cur = o.tgt; putNum(o); } continue; }
+    o.cur += d * numK;
+    putNum(o);
+  }
+}
+let numT = 0;
+(function frame(ts) {
+  /* Nothing behind the countdown veil is legible (18px blur at brightness .55)
+     and nobody can score during the lead-in, so stepping numerals there is pure
+     waste -- and worse than waste: every text write dirties the veil's backdrop
+     and forces a FULL-SCREEN blur to be recomputed for that frame. Measured,
+     pausing only the CSS animations behind the veil bought +3%; this loop was
+     what kept the backdrop dirty anyway. Numbers are snapped on the way in
+     (see cdOn) so nothing is mid-glide while we are not stepping. */
+  if (!cdCounting && ts - numT >= 32) {
+    // numerals are read by humans, not machines: ~30fps looks identical but halves
+    // the text writes (and the style work each one costs) on a board full of spammers
+    numT = ts;
+    stepNums(gNums);
+    for (const r of rowMap.values()) stepNums(r.nums);
+    for (const d of deptMap.values()) stepNums(d.nums);
+  }
+  requestAnimationFrame(frame);
+})(0);
+
+// land every numeral on its target immediately, so suspending the stepper can
+// never leave a half-counted score frozen on screen
+function snapAllNums() {
+  const snap = list => { for (const o of list) if (o.on && o.cur !== o.tgt) { o.cur = o.tgt; putNum(o); } };
+  snap(gNums);
+  for (const r of rowMap.values()) snap(r.nums);
+  for (const d of deptMap.values()) snap(d.nums);
+}
+
+addEventListener('resize', () => {
+  lastRowH = -1; lastW = -1; lastBoxW = -1; lastBoxH = -1; trackW = 0; trackL = -1;
+  settleLayout(320);
+});
+// A resize event is not the end of the story: the panel height transitions for
+// .5s afterwards and a rotation lands in stages, so a fixed settle window can
+// measure the track mid-flight and then never correct itself. Watch the box
+// itself instead of guessing.
+new ResizeObserver(() => {
+  if (roBusy) return;                 // relayout only writes --y/--fs, but never trust that
+  roBusy = true;
+  lastRowH = -1;
+  relayout();
+  roBusy = false;
+}).observe(box);
+
+$('#evtname').textContent = CFG.EVENT_NAME;
+mountNav('#navhost', 'board');
+
+const fvalEl = $('#fval');
+fvalEl.innerHTML = '<span></span><i>/s</i>';
+const nFast = mkNum(fvalEl.firstChild, fRate, .04, true);
+const rvalEl = $('#rval');
+rvalEl.innerHTML = '<span></span><i>/s</i>';
+const nRec = mkNum(rvalEl.firstChild, fRate, .04, true);
+const nRate = mkNum($('#tr'), fInt, .5, true);
+const nPlayers = mkNum($('#tp'), fInt, .5);
+const nClicks = mkNum($('#tc'), fInt, 2);
+gNums.push(nFast, nRec, nRate, nPlayers, nClicks);
+
+// the record holder is sticky for the whole race: it survives the holder
+// sliding out of the visible top-N, and only clears when the peaks clear
+let recBest = { name: '', val: 0 };
+// peak/s per player, sticky for the whole race: someone can post the fastest
+// hands of the day and still slide out of the visible top-N, and the panel
+// must keep showing them.
+const peakWho = new Map();
+function clearRates() {
+  cps.clear(); peak.clear(); peakWho.clear();
+  prevScore = new Map(); prevByRank = new Map();
+  recBest = { name: '', val: 0 };
+  try { localStorage.removeItem(PKEY); } catch { }
+  peakDue = 0;                       // let the cleared state be written immediately
+}
+
+/* ── peaks survive a refresh ──────────────────────────────────────────────
+   The projector gets reloaded mid-event (screensaver, cable, someone hits F5)
+   and every peak used to come back as 0. A peak is the one number a player
+   cannot re-earn on demand, so peaks are mirrored into localStorage and put
+   back on boot. Live rates are deliberately NOT stored: they have to start at
+   zero and be re-measured, or the board would open showing fake motion. */
+const PKEY = 'popcat.peaks';
+let peakDue = 0;
+function savePeaks(force) {
+  const now = Date.now();
+  if (!force && now < peakDue) return;
+  peakDue = now + 2000;              // localStorage writes are synchronous: keep them rare
+  try {
+    localStorage.setItem(PKEY, JSON.stringify({
+      v: 1, starts: seenStarts, total: lastTotal,
+      peak: [...peak].map(([id, v]) => [id, Math.round(v * 100) / 100]),
+      who: [...peakWho].map(([id, w]) => [id, w.name, Math.round(w.val * 100) / 100]),
+      rec: [recBest.name, recBest.val]
+    }));
+  } catch { /* private mode or quota: peaks just won't survive, never fatal */ }
+}
+function loadPeaks() {
+  let d = null;
+  try { d = JSON.parse(localStorage.getItem(PKEY) || 'null'); } catch { }
+  if (!d || d.v !== 1) return;
+  for (const [id, v] of d.peak || []) peak.set(id, Number(v) || 0);
+  for (const [id, name, v] of d.who || []) peakWho.set(id, { name, val: Number(v) || 0 });
+  recBest = { name: (d.rec || [])[0] || '', val: Number((d.rec || [])[1]) || 0 };
+  // carry the reset detectors across too, so the very first poll can still spot a
+  // score reset or a wipe that happened while this page was closed
+  seenStarts = d.starts || null;
+  lastTotal = Number(d.total) || 0;
+}
+
+// ── fastest-hands panel ──
+const speedBox = $('#speed'), speedRows = [];
+function renderSpeed() {
+  const list = [...peakWho.values()].sort((a, b) => b.val - a.val).slice(0, 3);
+  for (let i = 0; i < 3; i++) {
+    let s = speedRows[i];
+    if (!s) {
+      const el = document.createElement('div');
+      el.innerHTML = '<span class="sk"></span><span class="sn"></span><span class="sv"><span></span><i>/s</i></span>';
+      speedBox.append(el);
+      s = speedRows[i] = { el, sk: el.querySelector('.sk'), sn: el.querySelector('.sn'),
+                           num: mkNum(el.querySelector('.sv span'), fRate, .04, true), cls: '', nms: '' };
+      gNums.push(s.num);
+    }
+    const d = list[i];
+    const cls = 'srow ' + (d ? 's' + (i + 1) : 'empty');
+    if (s.cls !== cls) { s.cls = cls; s.el.className = cls; }
+    const k = d ? ['🥇', '🥈', '🥉'][i] : '·';
+    if (s.sk.textContent !== k) s.sk.textContent = k;
+    const nm = d ? d.name : 'waiting…';
+    if (s.nms !== nm) { s.nms = nm; s.sn.textContent = nm; }
+    setNum(s.num, d ? d.val : 0);
+  }
+}
+
+const tier = r => r >= 15 ? 5 : r >= 12 ? 4 : r >= 9 ? 3 : r >= 6 ? 2 : r >= 3 ? 1 : 0;
+
+// every lane is the same height, so one formula is exact — no measure/converge loop
+function layout(n) {
+  const H = box.clientHeight || 420;
+  // phones and tablets run TWO-LINE lanes (identity above, race track below),
+  // so a lane needs more height there or the track row collapses and the race
+  // vanishes. This must track the 820px breakpoint in the stylesheet.
+  const minRow = innerWidth <= 820 ? 52 : MINROW;
+  const maxFit = Math.max(3, Math.floor((H + GAP) / (minRow + GAP)));
+  const count = Math.max(1, Math.min(n, maxFit, MAXROWS));
+  const rowH = (H - GAP * (count - 1)) / count;
+  return { count, rowH, pitch: rowH + GAP };
+}
+
+// Geometry-only refit. Safe to run every frame while the container is resizing,
+// unlike a full render() — that would feed near-zero dt into the rate EMA and
+// spike everyone's clicks/sec. Rows are placed from the rank they already hold.
+function relayout() {
+  if (!rowMap.size) return;
+  const geo = layout(rowMap.size);
+  const bw = box.clientWidth, bh = box.clientHeight;
+  // The track is MEASURED, so anything that moves it has to invalidate it — not
+  // just a change in row height. A pure width change (rotating the phone, resizing
+  // the window, crossing a breakpoint) used to leave --tl/--tw describing the OLD
+  // layout, and because measureTrack() only re-ran when rowH changed, the stale
+  // value stuck: comets parked hundreds of px past the end of their lane.
+  if (geo.rowH !== lastRowH || bw !== lastBoxW || bh !== lastBoxH) {
+    lastRowH = geo.rowH; lastBoxW = bw; lastBoxH = bh;
+    applyRowMetrics(geo.rowH);
+    scheduleFit();               // --fs drives the columns, so the track moved
+  }
+  for (const row of rowMap.values()) {
+    const i = (row.rank || 1) - 1;
+    const y = i * geo.pitch;
+    if (row.y !== y) { row.y = y; row.el.style.setProperty('--y', y.toFixed(1) + 'px'); }
+    const op = i >= geo.count ? '0' : '1';   // no half-cut lane at the floor
+    if (row.el.style.opacity !== op) row.el.style.opacity = op;
+  }
+}
+
+// the container animates its height, so refit on every frame of that transition
+// instead of waiting for the next poll to notice
+function settleLayout(ms) {
+  const t0 = performance.now();
+  const step = () => {
+    relayout();
+    if (performance.now() - t0 < ms) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+// Fires whenever a lane's race zone actually changes width — rotation, a
+// breakpoint, the panel's height transition, browser zoom. measureTrack() is a
+// no-op when nothing moved, so this is cheap.
+const trackRO = new ResizeObserver(() => scheduleFit());
+
+function makeRow(r) {
+  const el = document.createElement('div');
+  el.className = 'row';
+  el.dataset.id = r.id;
+  el.innerHTML =
+    '<div class="barfill"></div><div class="tip"></div><div class="flash"></div><div class="streak"></div>' +
+    '<div class="rk"></div>' +
+    '<div class="who"><div class="nm"></div><div class="dp"></div></div>' +
+    '<div class="track"></div>' +
+    '<div class="rates">' +
+      '<div class="figure live"><b></b><i>live/s</i></div>' +
+      '<div class="figure peak"><b></b><i>peak/s</i></div>' +
+    '</div>' +
+    '<div class="mv"></div><div class="sc"></div>';
+  const q = s => el.querySelector(s);
+  const row = {
+    el, flash: q('.flash'), streak: q('.streak'), rk: q('.rk'), nm: q('.nm'), dp: q('.dp'),
+    live: q('.figure.live'), mv: q('.mv'), sc: q('.sc'), track: q('.track'),
+    cls: '', rcls: '', lt: -1, rank: null, rks: '', nms: '', dps: '', p: -1, y: -1, mvT: 0
+  };
+  row.nums = [mkNum(row.sc, fInt, .5), mkNum(q('.figure.live b'), fRate, .04, true), mkNum(q('.figure.peak b'), fRate, .04, true)];
+  // The comet's position is a pixel offset derived from the track's width, so the
+  // ONLY safe trigger to recompute it is the track itself changing size. Polling
+  // for that (on resize, on rowH change, once per board poll) is a race: a
+  // breakpoint change lands over several frames, and a measurement taken mid-flight
+  // becomes the value we keep. Watching the cell removes the timing question.
+  trackRO.observe(row.track);
+  return row;
+}
+
+const EASE = 'cubic-bezier(.32,.72,0,1)';
+
+// the whole overtake moment — every keyframe is transform/opacity, so it rides
+// the compositor and stays glass-smooth even mid-storm
+function playOvertake(row, up) {
+  row.mv.textContent = up ? '▲' : '▼';
+  row.mv.className = 'mv ' + (up ? 'up' : 'down');
+
+  row.flash.className = 'flash ' + (up ? 'up' : 'down');
+  row.flash.animate([{ opacity: 0 }, { opacity: 1, offset: .12 }, { opacity: .8, offset: .34 }, { opacity: 0 }],
+                    { duration: up ? 900 : 780, easing: EASE });
+
+  row.streak.className = 'streak' + (up ? '' : ' down');
+  row.streak.animate([{ opacity: 0, transform: 'translate3d(-72%,0,0)' },
+                      { opacity: 1, offset: .24 },
+                      { opacity: 0, transform: 'translate3d(72%,0,0)' }],
+                     { duration: up ? 660 : 880, easing: 'cubic-bezier(.22,.85,.3,1)' });
+
+  row.rk.animate([{ transform: 'scale(1)' },
+                  { transform: `scale(${up ? 1.6 : .74}) translateY(${up ? -3 : 3}px)`, offset: .22 },
+                  { transform: 'scale(1)' }],
+                 { duration: 720, easing: EASE });
+
+  row.mv.animate([{ transform: 'translateY(0)', opacity: 0 },
+                  { transform: `translateY(${up ? -8 : 8}px)`, opacity: 1, offset: .3 },
+                  { transform: 'translateY(0)', opacity: 1 }],
+                 { duration: 720, easing: EASE });
+
+  if (up) row.sc.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.22)', offset: .24 }, { transform: 'scale(1)' }],
+                         { duration: 620, easing: EASE });
+}
+
+/* -Infinity, not 0: performance.now() IS under 1900 for the first two seconds
+   of a page's life, so a zero start made the "one callout at a time" gate
+   swallow any overtake that happened right after the projector was opened. */
+let ovtAt = -Infinity, ovtAnims = [];
+function fireOvt(o) {
+  if (!o.victim || o.victim === o.who) return;
+  const now = performance.now();
+  if (now - ovtAt < 1900) return;                 // one callout at a time — never spammy
+  ovtAt = now;
+  const el = $('#ovt'), lead = o.rank === 1;
+  $('#ovtA').textContent = o.who;
+  $('#ovtB').textContent = o.victim;
+  $('#ovtVerb').textContent = lead ? '👑 TAKES THE LEAD' : '▲ OVERTAKE';
+  el.className = lead ? 'lead' : '';
+
+  for (const a of ovtAnims) a.cancel();
+  ovtAnims = [];
+  const push = (node, frames, opts) => ovtAnims.push(node.animate(frames, opts));
+  // easing in the OPTIONS is applied to overall progress BEFORE keyframe offsets
+  // are looked up, and EASE is front-loaded enough that half the duration is
+  // already 97% of the way through. That silently crushed this whole sequence
+  // into its first ~600ms. Overall timing stays linear so the offsets below mean
+  // what they say, and every curve lives on the segment it belongs to.
+  const D = 2000, LIN = { duration: D, easing: 'linear' };
+
+  // the lockup arrives as one object…
+  push(el, [
+    // no scale on the container: it now spans the panel, so scaling it would
+    // drag the shading gradient's edges into view
+    { opacity: 0, transform: 'translate3d(0,22px,0)', easing: EASE },
+    { opacity: 1, transform: 'none', offset: .15 },
+    { opacity: 1, transform: 'none', offset: .72, easing: 'ease-in' },
+    { opacity: 0, transform: 'translate3d(0,-12px,0)' }
+  ], LIN);
+
+  // …then the three lines settle in sequence. That stagger is the whole
+  // difference between a lower-third and a box that simply appears.
+  push($('#ovtVerb'), [
+    { transform: 'translate3d(0,9px,0)', easing: EASE },
+    { transform: 'none', offset: .19 }, { transform: 'none' }
+  ], LIN);
+  push($('#ovtA'), [
+    { transform: 'translate3d(0,16px,0) scale(.93)' },
+    { transform: 'translate3d(0,16px,0) scale(.93)', offset: .03, easing: EASE },
+    { transform: 'translate3d(0,0,0) scale(1.02)', offset: .22, easing: 'ease-out' },
+    { transform: 'none', offset: .34 }, { transform: 'none' }
+  ], LIN);
+  push($('#ovtPast'), [
+    { opacity: 0, transform: 'translate3d(0,8px,0)' },
+    { opacity: 0, transform: 'translate3d(0,8px,0)', offset: .11, easing: EASE },
+    { opacity: 1, transform: 'none', offset: .40 }, { opacity: 1, transform: 'none' }
+  ], LIN);
+
+  // one light sweep rips across the glyphs. background-position repaints the
+  // name, which is why it is ONE element for 2s and not a per-row effect.
+  push($('#ovtA'), [
+    { backgroundPosition: '100% 0' },
+    { backgroundPosition: '100% 0', offset: .075, easing: 'cubic-bezier(.3,.82,.25,1)' },
+    { backgroundPosition: '0% 0', offset: .47 }, { backgroundPosition: '0% 0' }
+  ], LIN);
+}
+
+function updateRow(row, r, i, geo, max, W) {
+  const el = row.el, st = el.style;
+
+  const y = i * geo.pitch;
+  if (row.y !== y) { row.y = y; st.setProperty('--y', y.toFixed(1) + 'px'); }
+
+  const rate = cps.get(r.id) || 0, t = tier(rate);
+  const cls = 'row' + (r.rank <= 3 ? ' p' + r.rank : ' pk') + (t ? ' moving' : '');
+  if (row.cls !== cls) { row.cls = cls; el.className = cls; }
+  if (row.lt !== t) { row.lt = t; row.live.className = 'figure live' + (t ? ' t' + t : ''); }
+
+  const rk = String(r.rank);
+  if (row.rks !== rk) { row.rks = rk; row.rk.textContent = rk; }
+  const nm = (r.rank === 1 ? '👑 ' : '') + r.username;
+  if (row.nms !== nm) { row.nms = nm; row.nm.textContent = nm; }
+  if (row.dps !== r.department) { row.dps = r.department; row.dp.textContent = r.department; }
+
+  // overtake: arrow + a pure-opacity flash via the Web Animations API (no reflow hack)
+  if (row.rank != null && row.rank !== r.rank) {
+    const up = r.rank < row.rank;
+    playOvertake(row, up);
+    clearTimeout(row.mvT);
+    row.mvT = setTimeout(() => { row.mv.className = 'mv'; }, 2800);
+    if (up && r.rank <= 5 && (!bestOvt || r.rank < bestOvt.rank))
+      bestOvt = { rank: r.rank, who: r.username, victim: prevByRank.get(r.rank) || '' };
+  }
+  row.rank = r.rank;
+
+  const p = Math.max(.02, Number(r.score) / max);
+  row.pRaw = p;
+  setBar(row, p, W);
+
+  setNum(row.nums[0], Number(r.score));
+  setNum(row.nums[1], rate);
+  setNum(row.nums[2], peak.get(r.id) || 0);
+}
+
+// The comet travels the TRACK only, and stops exactly one tip-width short of the
+// far end, so it can never clip out of the lane or touch the stats. The bar is
+// then scaled to land on the comet's own right edge — one source of truth for
+// both, instead of two formulas that could drift apart.
+function setBar(row, p, W) {
+  // The cache has to key on the TRACK WIDTH as well as the fill fraction. Keying
+  // on p alone meant that when the track changed size but a player's share of the
+  // lead did not, this returned early and the comet kept a pixel offset measured
+  // against a track that no longer existed — parking it hundreds of px past the
+  // end of its lane after a rotation or a breakpoint change.
+  if (!(p >= 0) || (Math.abs(row.p - p) <= .0005 && row.w === W)) return;
+  row.p = p; row.w = W;
+  const st = row.el.style;
+  const tx = p * Math.max(0, W - TIPW);
+  st.setProperty('--tx', tx.toFixed(1) + 'px');
+  st.setProperty('--p', (W > 0 ? (tx + TIPW) / W : .03).toFixed(4));
+}
+
+// Reads the race zone off the real grid cell. Returns true when the geometry
+// actually changed, so callers can invalidate the lanes that depend on it.
+function measureTrack() {
+  const src = (leadEl && leadEl.isConnected ? leadEl : rowMap.values().next().value?.el);
+  const tr = src && src.querySelector('.track');
+  if (!tr) return false;
+  const tl = tr.offsetLeft, tw = tr.clientWidth;
+  if (tw <= 0 || (Math.abs(tl - trackL) <= 1 && Math.abs(tw - trackW) <= 1)) return false;
+  trackL = tl; trackW = tw;
+  box.style.setProperty('--tl', tl.toFixed(0) + 'px');
+  box.style.setProperty('--tw', tw.toFixed(0) + 'px');
+  for (const row of rowMap.values()) row.p = -1;
+  return true;
+}
+
+function scheduleFit(retry) {
+  if (fitRaf) cancelAnimationFrame(fitRaf);
+  fitRaf = requestAnimationFrame(() => {
+    fitRaf = 0;
+    // Crossing a breakpoint can leave the track cell momentarily 0-wide. Measuring
+    // then is worse than not measuring at all, so come back next frame instead of
+    // freezing every lane against the old geometry.
+    const src = (leadEl && leadEl.isConnected ? leadEl : rowMap.values().next().value?.el);
+    const tr = src && src.querySelector('.track');
+    if (tr && tr.clientWidth <= 0 && (retry || 0) < 20) { scheduleFit((retry || 0) + 1); return; }
+    applyFit();
+    // A single frame is not enough. A resize settles in stages — the breakpoint
+    // swaps the grid, then applyRowMetrics rewrites --fs, and each stage moves the
+    // track again. Measuring once caught an intermediate width (a 159px track read
+    // as 206px) and froze every comet against it, which is exactly the "comet 51px
+    // past the end" seen after a rotation. measureTrack() is a no-op when nothing
+    // moved, so these follow-ups cost nothing once the layout is stable.
+    clearTimeout(fitSettle);
+    let n = 0;
+    (function again() {
+      applyFit();
+      if (++n < 4) fitSettle = setTimeout(again, n * 140);
+    })();
+  });
+}
+
+// One place that turns "the race zone moved" into "every comet is repositioned".
+function applyFit() {
+  if (measureTrack()) for (const row of rowMap.values()) setBar(row, row.pRaw, trackW);
+}
+
+function render(top) {
+  bestOvt = null;
+  // live clicks/sec per player: EMA over score delta since last poll
+  const now = performance.now();
+  const dt = cpsTs ? (now - cpsTs) / 1000 : 0;
+  cpsTs = now;
+  if (dt > 0.05) for (const r of top) {
+    const prev = prevScore.get(r.id);
+    if (prev === undefined) continue;
+    const inst = Math.max(0, (Number(r.score) - prev) / dt);
+    const cur = cps.get(r.id) || 0;
+    const v = cur + (inst - cur) * 0.5;
+    cps.set(r.id, v);
+    peak.set(r.id, Math.max(peak.get(r.id) || 0, v));   // best clicks/sec this race
+  }
+  setNum(nRate, [...cps.values()].reduce((a, b) => a + b, 0));
+
+  // per-team live rate + crowned top scorer, and the single fastest racer right now
+  deptStats = new Map();
+  let fastName = '', fastRate = 0;
+  for (const r of top) {
+    const rate = cps.get(r.id) || 0;
+    if (rate > fastRate) { fastRate = rate; fastName = r.username; }
+    const pk = peak.get(r.id) || 0;
+    if (pk > recBest.val) recBest = { name: r.username, val: pk };
+    if (pk > 0) {
+      const w = peakWho.get(r.id);
+      if (!w) peakWho.set(r.id, { name: r.username, val: pk });
+      else { w.name = r.username; if (pk > w.val) w.val = pk; }
+    }
+    let s = deptStats.get(r.department);
+    if (!s) { s = { cps: 0, name: '', score: -1 }; deptStats.set(r.department, s); }
+    s.cps += rate;
+    if (Number(r.score) > s.score) { s.score = Number(r.score); s.name = r.username; }
+  }
+  setFastest(fastName, fastRate);
+  setRecord(recBest.name, recBest.val);
+  renderSpeed();
+
+  // ── one measure per frame, before any write: zero forced reflow ──
+  const geo = layout(top.length), W = box.clientWidth;
+  // The track is a real grid cell now, so its edges ARE the race zone — read
+  // them instead of guessing a gutter. Every lane shares one geometry because
+  // every non-track column is sized in --fs, not em.
+  measureTrack();
+  if (geo.rowH !== lastRowH) { lastRowH = geo.rowH; applyRowMetrics(geo.rowH); }
+  if (W !== lastW) { lastW = W; for (const row of rowMap.values()) row.p = -1; }
+
+  const shown = top.slice(0, geo.count);
+  const max = Math.max(1, ...shown.map(r => Number(r.score)));
+  const keep = new Set();
+
+  for (let i = 0; i < shown.length; i++) {
+    const r = shown[i];
+    keep.add(r.id);
+    let row = rowMap.get(r.id);
+    if (!row) {
+      row = makeRow(r);
+      rowMap.set(r.id, row);
+      row.y = i * geo.pitch;
+      row.el.style.setProperty('--y', row.y.toFixed(1) + 'px');
+      row.el.style.opacity = '0';
+      box.append(row.el);
+      requestAnimationFrame(() => { row.el.style.opacity = '1'; });
+    }
+    if (i === 0) leadEl = row.el;
+    updateRow(row, r, i, geo, max, trackW);
+  }
+  for (const [id, row] of rowMap) if (!keep.has(id)) {
+    rowMap.delete(id);
+    clearTimeout(row.mvT);
+    trackRO.unobserve(row.track);        // the observer holds a strong ref
+    row.el.style.opacity = '0';
+    setTimeout(() => row.el.remove(), 440);
+  }
+
+  prevScore = new Map(top.map(r => [r.id, Number(r.score)]));
+  prevByRank = new Map(top.map(r => [r.rank, r.username]));
+  prevMax = max;
+  if (bestOvt) fireOvt(bestOvt);
+
+  // Rows created this pass only exist in the DOM from the NEXT frame, so the
+  // very first measure is necessarily stale. Re-measure once the browser has
+  // laid them out and push the lanes again — otherwise every bar sits at zero
+  // fill until the following poll.
+  scheduleFit();
+}
+
+let fastCls = '';
+function setFastest(name, rate) {
+  const ok = rate >= 1 && !!name;
+  setNum(nFast, ok ? rate : 0);
+  const n = $('#fname'), nm = ok ? name : 'waiting…';
+  if (n.textContent !== nm) n.textContent = nm;
+  const cls = ok ? 'fastest t' + Math.max(1, tier(rate)) : 'fastest idle';
+  if (fastCls !== cls) { fastCls = cls; $('#fastest').className = cls; }
+}
+
+let recCls = '';
+function setRecord(name, rate) {
+  const ok = rate >= 1 && !!name;
+  setNum(nRec, ok ? rate : 0);
+  const n = $('#rname'), nm = ok ? name : '—';
+  if (n.textContent !== nm) n.textContent = nm;
+  const cls = ok ? 'fastest rec t' + Math.max(1, tier(rate)) : 'fastest rec idle';
+  if (recCls !== cls) { recCls = cls; $('#record').className = cls; }
+}
+
+function makeDept() {
+  const el = document.createElement('div');
+  el.className = 'dept';
+  el.innerHTML =
+    '<div class="barfill"></div>' +
+    '<div class="dhead"><div class="dn"></div><div class="drate"><span></span><i>/s</i></div></div>' +
+    '<div class="dsub"><div class="dtop"></div><div class="dt"></div></div>';
+  const q = s => el.querySelector(s);
+  const d = { el, dn: q('.dn'), drate: q('.drate'), dtop: q('.dtop'),
+              cls: '', rcls: '', dns: '', tops: '', x: -1, w: -1, p: -1 };
+  d.nums = [mkNum(q('.drate span'), fRate, .04, true), mkNum(q('.dt'), fInt, 2)];
+  return d;
+}
+
+function renderDepts(depts) {
+  const list = depts.slice(0, 6);
+  if (!list.length) return;
+  const max = Math.max(1, ...list.map(d => Number(d.total)));
+  const W = dbox.clientWidth;
+  const w = (W - DGAP * (list.length - 1)) / list.length;
+  const keep = new Set();
+
+  list.forEach((d, i) => {
+    keep.add(d.department);
+    let c = deptMap.get(d.department);
+    if (!c) {
+      c = makeDept(); deptMap.set(d.department, c);
+      c.x = i * (w + DGAP); c.w = w;
+      c.el.style.setProperty('--x', c.x.toFixed(1) + 'px');
+      c.el.style.width = w.toFixed(1) + 'px';
+      c.el.style.opacity = '0';
+      dbox.append(c.el);
+      requestAnimationFrame(() => { c.el.style.opacity = '1'; });
+    }
+    const x = i * (w + DGAP);
+    if (c.x !== x) { c.x = x; c.el.style.setProperty('--x', x.toFixed(1) + 'px'); }
+    if (c.w !== w) { c.w = w; c.el.style.width = w.toFixed(1) + 'px'; }
+
+    const p = Number(d.total) / max;
+    if (Math.abs(c.p - p) > .0005) { c.p = p; c.el.style.setProperty('--p', p.toFixed(4)); }
+
+    const cls = 'dept' + (i === 0 ? ' d1' : '');
+    if (c.cls !== cls) { c.cls = cls; c.el.className = cls; }
+    const dn = (i === 0 ? '🏆 ' : '') + d.department;
+    if (c.dns !== dn) { c.dns = dn; c.dn.textContent = dn; }
+
+    const st = deptStats.get(d.department) || { cps: 0, name: '', score: 0 };
+    const t = tier(st.cps), rcls = 'drate' + (t ? ' t' + t : '');
+    if (c.rcls !== rcls) { c.rcls = rcls; c.drate.className = rcls; }
+    const topTxt = st.name ? '👑 ' + st.name + ' · ' + num(st.score) : d.members + ' players';
+    if (c.tops !== topTxt) { c.tops = topTxt; c.dtop.textContent = topTxt; c.dtop.style.opacity = st.name ? '' : '.5'; }
+
+    setNum(c.nums[0], st.cps);
+    setNum(c.nums[1], Number(d.total));
+  });
+
+  for (const [k, c] of deptMap) if (!keep.has(k)) {
+    deptMap.delete(k);
+    c.el.style.opacity = '0';
+    setTimeout(() => c.el.remove(), 440);
+  }
+}
+
+async function poll() {
+  try {
+    const b = (await firstBoard()) || (await rpc('get_board', { p_limit: 40 }));
+    const tc = Number(b.total_clicks) || 0;
+    // a new race, OR an admin "reset scores" / player wipe (the board total
+    // can only fall when someone cleared it) both retire the old peaks
+    if ((b.starts_at && b.starts_at !== seenStarts) || tc < lastTotal - 2) clearRates();
+    lastTotal = tc; seenStarts = b.starts_at || null;
+    rawEnds = b.ends_at || null;
+    endsAt = b.ends_at || CFG.EVENT_END || null; startsAt = b.starts_at;
+    setNum(nPlayers, Number(b.total_players) || 0);
+    setNum(nClicks, tc);
+    render(b.top || []);
+    renderDepts(b.depts || []);
+    savePeaks();
+  } catch { /* keep the last board on screen */ }
+}
+
+// Countdown before a race. Returns true while it's showing.
+// Everything is toggled with classes only — no per-frame JS — so the main
+// thread stays free for the lanes. Element lookups are cached once: cdEls()
+// used to run six querySelectors on every 200ms tick for no reason.
+let _cdc = null;
+function cdEls() {
+  if (!_cdc) _cdc = {
+    cd: $('#cd'), veil: $('#cdveil'), ring: $('#cdring'), ring2: $('#cdring2'),
+    sub: $('#cdsub'), fog: $('#cdfog'), cats: [...document.querySelectorAll('.cdcat')]
+  };
+  return _cdc;
+}
+
+function showCd(text, go) {
+  const { cd, ring, ring2, sub } = cdEls();
+  cd.classList.remove('show'); void cd.offsetWidth;   // re-trigger the pop each change
+  cd.textContent = text; cd.classList.toggle('go', !!go); cd.classList.add('show');
+  ring.classList.toggle('go', !!go);
+  ring2.classList.toggle('go', !!go);
+  sub.classList.toggle('show', !go);
+  // the static bloom behind the digit has to change colour with it, and CSS
+  // cannot select a parent from #cd.go, so the state lives on <body>
+  document.body.classList.toggle('cd-go', !!go);
+}
+
+function cdOn() {
+  const { veil, ring, ring2, fog, cats } = cdEls();
+  /* Tell the page the veil is up. Everything behind it then stops animating:
+     it is blurred past legibility and unscoreable, so the only thing those
+     animations still achieve is dirtying the backdrop and forcing a
+     full-screen blur recompute every frame. */
+  document.body.classList.add('cd-on');
+  snapAllNums();                 // never freeze the stepper mid-count
+  veil.classList.add('show'); veil.classList.remove('go');
+  ring.classList.add('show'); ring.classList.remove('go');
+  ring2.classList.add('show'); ring2.classList.remove('go');
+  fog.classList.add('show');
+  cats.forEach(c => c.classList.add('show'));
+}
+
+/* NOT pre-rasterised on purpose. The first cdOn() looked like a ~1.8s paint
+   bill, and a one-shot warm-up that painted these layers at opacity .004 was
+   built to pay it early — it changed nothing, because the stall was never
+   paint. It was `new AudioContext()` inside the first Snd.beat() (see sb.js).
+   Style and layout for every step of cdOn() total 26ms; measured without any
+   warm-up the beats come out 9-12ms apart. Left here so nobody rebuilds it. */
+function cdOff() {
+  const { cd, veil, ring, ring2, sub, fog, cats } = cdEls();
+  cd.classList.remove('show', 'go');
+  document.body.classList.remove('cd-on', 'cd-go');
+  // the blur lives on .show, so dropping it here is what stops the projector
+  // paying for a full-screen backdrop readback for the rest of the race
+  veil.classList.remove('show', 'go');
+  ring.classList.remove('show', 'go');
+  ring2.classList.remove('show', 'go');
+  sub.classList.remove('show');
+  fog.classList.remove('show');
+  cats.forEach(c => c.classList.remove('show'));
+  cdCounting = false; cdVal = null; clearBeats();
+  snapAllNums();                 // resume showing the truth immediately
+}
+
+/* The beats are SCHEDULED, not recomputed per tick.
+   tick() runs at 200ms, so deriving the digit from the clock each time quantised
+   every beat to the next tick: an 886ms beat was painted as 1132ms, then 669ms,
+   then 1002ms (measured). The digits were right and the total was right, but the
+   rhythm stumbled -- which is exactly what "the 5 is a rush" describes.
+   One timer per beat costs nothing and lands each digit on its real boundary. */
+function clearBeats() {
+  if (cdPlan) for (const t of cdPlan.timers) clearTimeout(t);
+  cdPlan = null;
+}
+
+function showGo() {
+  cdVal = 'GO';
+  showCd('GO!', true);
+  $('#cdveil').classList.add('go');
+  Snd.go(); Snd.duck(900);
+}
+
+function scheduleBeats(left) {
+  clearBeats();
+  /* EVEN BEATS, not real seconds.
+     The server puts the start 5s out, but this screen only learns about it when
+     a poll lands -- typically with ~4.4s left. Counting real seconds then gave
+     one short opening beat followed by full ones. So divide the time we ACTUALLY
+     have into equal slices: 4.4s becomes five 880ms beats. The digits are no
+     longer seconds, deliberately -- it was never a stopwatch -- but every beat
+     is the same length, and GO! still fires on the true server start so scoring
+     is untouched.
+
+     SELF-CORRECTING: each beat schedules only the next one, from a monotonic
+     deadline. A pre-scheduled list of timers cannot survive a hiccup -- one
+     936ms stall on the opening frame left the whole run a beat behind and GO!
+     then guillotined "1" after 54ms, which is uglier than the bug this
+     replaced. Re-deriving the step from the time genuinely left keeps the
+     digits consecutive, keeps them even with each other, and lands GO! on the
+     start line no matter what the first frame costs. */
+  const n = Math.max(1, Math.min(5, Math.round(left / 1000)));
+  cdPlan = { n, slice: left / n, timers: [] };
+  const end = performance.now() + left;
+
+  const beat = (k) => {
+    if (!cdCounting) return;
+    const remain = end - performance.now();
+    if (k < 1 || remain <= 120) { if (cdVal !== 'GO') showGo(); return; }
+    const d = String(k);
+    cdVal = d; showCd(d, false); Snd.beat(d); Snd.duck(1400);
+    // never below 240ms: a digit nobody can read is worse than a dropped beat
+    const step = Math.max(240, (end - performance.now()) / k);
+    cdPlan.timers.push(setTimeout(() => beat(k - 1), Math.round(step)));
+  };
+  beat(n);
+}
+
+function countdown() {
+  if (!startsAt) { if (cdCounting || cdVal) cdOff(); return false; }
+  // msLeft() clamps at 0, so it can never tell "just started" from "started ten
+  // minutes ago" — using it here pinned a full-screen GO! over the board for the
+  // whole race. This offset is signed: negative before the start, growing after.
+  const sinceStart = serverNow() - Date.parse(startsAt);
+  if (sinceStart < 0) {
+    if (!cdCounting) { cdCounting = true; cdOn(); scheduleBeats(-sinceStart); }
+    return true;
+  }
+  if (cdCounting) {
+    if (sinceStart < 1100) {
+      if (cdVal !== 'GO') showGo();
+      return true;
+    }
+    cdOff();
+  }
+  return false;
+}
+
+function tick() {
+  const counting = countdown();
+  const left = msLeft(endsAt), t = $('#timer');
+  if (counting) { t.className = 'idle'; t.textContent = 'GET READY'; hideBanner(); return; }
+  const live = !endsAt || left > 0;
+  if (live) {
+    t.className = left <= 10000 && endsAt ? 'hot' : '';
+    t.textContent = endsAt ? clock(left) : 'OPEN';
+    wasLive = !!endsAt;                 // open play never shows a FINAL RESULT banner
+  } else {
+    t.className = 'idle';
+    t.textContent = 'FINISHED';
+  }
+  setBanner(!live && wasLive);
+}
+
+// the banner is fixed to the floor, so showing it must also shrink #app by its
+// height — otherwise it parks on top of the team strip
+function setBanner(show) {
+  const b = $('#banner');
+  if (b.hidden !== !show) {
+    b.hidden = !show;
+    if (show) b.textContent = 'FINAL RESULT';
+    document.documentElement.style.setProperty(
+      '--bannerpad', show ? (b.offsetHeight + 8) + 'px' : '0px');
+    lastRowH = -1; lastW = -1; lastBoxW = -1; lastBoxH = -1; trackW = 0; trackL = -1;
+    settleLayout(700);            // outlast the .5s height transition
+  }
+}
+const hideBanner = () => setBanner(false);
+
+tick();
+setInterval(tick, 200);
+// ponytail: same lesson as the phones — never stack requests. One board read at a
+// time, pace follows real server latency so the projector eases off when the DB is hot.
+let lbLat = 250, lbGap = 900;
+loadPeaks();
+(async function loopBoard() {
+  // the glide must already be in place before poll() writes the new bar targets,
+  // otherwise the duration change only takes effect one refresh late
+  setGlide(lbGap);
+  const t0 = performance.now();
+  await poll();
+  const took = performance.now() - t0;
+  lbLat += (took - lbLat) * 0.3;
+  let target = lbLat < 250 ? 700 : lbLat < 600 ? 1000 : lbLat < 1500 ? 1600 : 2400;
+
+  /* Spend requests where they buy something.
+     During the lead-in nobody can score, so the board literally cannot change
+     and a 700ms poll is 700ms of nothing — while the main thread is busy with
+     the one animation the whole room is watching. Polling still happens, just
+     slowly, so a host who stops the round mid-countdown is still noticed.
+     A hidden tab is the same argument taken further: nobody is looking. */
+  if (cdCounting) target = Math.max(target, 2500);
+  else if (document.hidden) target = Math.max(target, 5000);
+  /* Waiting for a round to be started from someone's phone is the one moment
+     latency is visible as a MISTAKE rather than staleness: the lead-in is only
+     5s, so a 700ms poll can mean the board first hears about it with 4.2s left
+     and the count opens on 4 instead of 5. This is one projector, not a hundred
+     handsets — 2.5 requests/sec here is nothing against a measured 185/s
+     ceiling, and it buys the full five beats. */
+  else if (!rawEnds || serverNow() >= Date.parse(rawEnds)) target = Math.min(target, 400);
+
+  /* The wait now ABSORBS the request instead of being added on top of it. The old
+     line waited the full delay AFTER the reply landed, so a 2s reply became a
+     2s + 3s = 5s gap between refreshes — five seconds of a frozen leaderboard
+     while every phone was still clicking. Same ceiling on request rate, none of
+     the dead time. */
+  const d = Math.max(250, target - took);
+  lbGap += (took + d - lbGap) * 0.4;
+  setTimeout(loopBoard, d);
+})();
+
+/* Coming back to a hidden-then-visible tab must not wait out a 5s backoff —
+   the host flipping to the projector wants the live board immediately. */
+addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
+</script>
+</body>
+</html>

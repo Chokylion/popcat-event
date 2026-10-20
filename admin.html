@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#08060f">
+<title>Kaizen Pop-Cat — Admin</title>
+<link rel="stylesheet" href="style.css">
+<link rel="preload" as="image" href="img/popcat-closed.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" media="print" onload="this.media='all'"
+      href="https://fonts.googleapis.com/css2?family=Anton&family=Space+Grotesk:wght@400;500;600;700&display=swap">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛠️</text></svg>">
+<style>
+  #wrap{max-width:920px;margin:0 auto;padding:22px 16px 70px}
+  h1{margin:0 0 16px;font-size:26px;line-height:1.1}
+  h1 small{display:block;font-size:10px;color:var(--dim);font-weight:600;letter-spacing:.2em;
+    text-transform:uppercase;margin-top:6px;font-family:var(--font-ui)}
+
+  /* double-bezel cards */
+  .panel{
+    position:relative;z-index:1;padding:5px;border-radius:26px;margin-bottom:14px;
+    background:var(--glass-2);border:1px solid var(--hair-soft);box-shadow:var(--lift)
+  }
+  .panel > .core{
+    border-radius:21px;padding:18px;
+    background:linear-gradient(180deg,rgba(20,14,36,.96),rgba(11,8,22,.96));
+    border:1px solid var(--hair);box-shadow:var(--inset)
+  }
+  .panel h2{
+    margin:0 0 14px;font-family:var(--font-ui);font-weight:600;font-size:11px;
+    letter-spacing:.26em;text-transform:uppercase;color:var(--dim);
+    display:flex;align-items:center;gap:.7em
+  }
+  .panel h2::after{content:"";flex:1;height:1px;background:var(--hair-soft)}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;align-items:end}
+  .rowbtns{display:flex;gap:9px;flex-wrap:wrap;margin-top:10px}
+
+  /* ── duration: presets + steppers, so nobody types during a live event ── */
+  .presets{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 9px}
+  .chip{
+    padding:7px 13px;border-radius:999px;background:var(--glass);border:1px solid var(--hair);
+    color:var(--dim);font-family:var(--font-ui);font-size:12px;font-weight:700;letter-spacing:.05em;
+    transition:color .35s var(--spring),border-color .35s var(--spring),background .35s var(--spring)
+  }
+  .chip:hover{color:#fff;border-color:var(--hair-soft)}
+  .chip.on{color:var(--ember);border-color:rgba(255,193,77,.55);background:rgba(255,193,77,.13)}
+  .stepper{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .sbtn{
+    min-width:42px;height:40px;padding:0 9px;border-radius:12px;background:var(--glass);
+    border:1px solid var(--hair);color:var(--fg);font-family:var(--font-ui);font-size:13px;
+    font-weight:700;font-variant-numeric:tabular-nums;
+    transition:background .35s var(--spring),border-color .35s var(--spring),transform .35s var(--spring)
+  }
+  .sbtn:hover{background:rgba(255,255,255,.085);border-color:var(--hair-soft)}
+  .sbtn:active{transform:scale(.93)}
+  #secs{
+    width:104px;flex:none;text-align:center;font-family:var(--font-display);font-size:23px;
+    font-variant-numeric:tabular-nums;color:var(--ember);padding:7px 6px;
+    /* lives outside .field now, so it carries its own surface */
+    border-radius:13px;background:rgba(6,4,12,.72);border:1px solid var(--hair);outline:none;
+    box-shadow:inset 0 2px 8px rgba(0,0,0,.5);
+    transition:border-color .35s var(--spring),box-shadow .35s var(--spring);
+    -moz-appearance:textfield
+  }
+  #secs:focus{border-color:var(--pumpkin);
+    box-shadow:inset 0 2px 8px rgba(0,0,0,.5),0 0 0 3px rgba(255,122,26,.2)}
+  /* the spinner arrows are a mis-click waiting to happen next to real steppers */
+  #secs::-webkit-inner-spin-button,#secs::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+  .secshint{font-size:12px;color:var(--dim);margin:8px 0 0;font-weight:600;min-height:16px}
+  .secshint b{color:var(--ember)}
+
+  #clock{
+    font-family:var(--font-display);font-size:44px;font-variant-numeric:tabular-nums;line-height:1;
+    background:linear-gradient(180deg,#fff,var(--ember));-webkit-background-clip:text;
+    background-clip:text;color:transparent
+  }
+  #clock.idle{
+    font-family:var(--font-ui);font-weight:600;font-size:18px;color:var(--dim);
+    letter-spacing:.2em;background:none;-webkit-text-fill-color:var(--dim)
+  }
+  #clock.hot{background:linear-gradient(180deg,#fff,var(--blood));-webkit-background-clip:text;background-clip:text}
+
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th{text-align:left;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim);
+    padding:8px;border-bottom:1px solid var(--hair);font-weight:600}
+  td{padding:10px 8px;border-bottom:1px solid rgba(255,255,255,.045)}
+  td.sc{font-family:var(--font-display);color:var(--ember);font-variant-numeric:tabular-nums;text-align:right}
+  .scin{
+    width:88px;text-align:right;font-family:var(--font-display);font-variant-numeric:tabular-nums;
+    color:var(--ember);background:var(--glass);border:1px solid var(--hair);border-radius:9px;
+    padding:5px 9px;font-size:15px;transition:border-color .4s var(--spring)
+  }
+  .scin:focus{outline:none;border-color:var(--ember)}
+  .scin:disabled{opacity:.5}
+  .x{
+    background:transparent;border:1px solid var(--hair);border-radius:999px;padding:5px 13px;
+    color:var(--down);font-size:12px;font-weight:600;
+    transition:background .4s var(--spring),border-color .4s var(--spring)
+  }
+  .x:hover{background:rgba(255,46,85,.12);border-color:rgba(255,46,85,.5)}
+  .ok{color:var(--up);font-size:13px;min-height:18px;margin:10px 0 0;font-weight:600}
+  .tablewrap{overflow:auto;max-height:52vh;border-radius:14px}
+
+  /* danger zone — deliberately unmistakable */
+  .danger-zone .core{
+    border:1px solid rgba(255,46,85,.34);
+    background:linear-gradient(160deg,rgba(255,46,85,.10),rgba(255,46,85,.02) 60%,transparent);
+    box-shadow:inset 0 1px 1px rgba(255,255,255,.07),0 0 44px -18px rgba(255,46,85,.8)
+  }
+  .danger-zone h2{color:#ff8ba4}
+  .hint{color:var(--dim);font-size:13px;line-height:1.55;margin:8px 0 16px;max-width:62ch}
+  .hint b{color:#ff8ba4}
+  .btn.big{
+    width:100%;padding:20px 22px;font-size:18px;letter-spacing:.07em;font-weight:800;
+    border-radius:18px;text-transform:uppercase
+  }
+  .btn.danger{
+    background:linear-gradient(180deg,#ff3f63,#d81640);color:#fff;border:1px solid rgba(255,120,145,.55);
+    box-shadow:inset 0 1px 1px rgba(255,255,255,.28),0 10px 30px -12px rgba(255,46,85,.9);
+    transition:transform .5s cubic-bezier(.32,.72,0,1),box-shadow .5s cubic-bezier(.32,.72,0,1)
+  }
+  .btn.danger:hover:not(:disabled){box-shadow:inset 0 1px 1px rgba(255,255,255,.28),0 16px 40px -12px rgba(255,46,85,1)}
+  .btn.danger:active:not(:disabled){transform:scale(.985)}
+  .btn.danger:disabled{opacity:.55;cursor:default}
+
+  /* reset progress — every stage is shown so "clean" is something you can see */
+  .steps{list-style:none;margin:16px 0 0;padding:0;display:grid;gap:8px}
+  .steps li{
+    position:relative;padding-left:27px;font-size:13px;font-weight:600;color:var(--dim);
+    transition:color .45s cubic-bezier(.32,.72,0,1)
+  }
+  .steps li::before{
+    content:'';position:absolute;left:0;top:50%;width:16px;height:16px;border-radius:50%;
+    transform:translateY(-50%);border:1.5px solid rgba(255,255,255,.2);box-sizing:border-box
+  }
+  .steps li.run{color:#ffd9a0}
+  .steps li.run::before{border-color:#ffb443;border-top-color:transparent;animation:spin .7s linear infinite}
+  .steps li.done{color:var(--up)}
+  .steps li.done::before{
+    content:'✓';border-color:transparent;background:var(--up);color:#06130a;
+    font-size:10px;font-weight:900;line-height:16px;text-align:center
+  }
+  .steps li.fail{color:#ff8ba4}
+  .steps li.fail::before{content:'!';border-color:#ff3f63;background:rgba(255,63,99,.28);
+    color:#ffc2ce;font-size:10px;font-weight:900;line-height:14px;text-align:center}
+  @keyframes spin{to{transform:translateY(-50%) rotate(360deg)}}
+
+  /* gate */
+  #gate{max-width:390px;margin:9vh auto 0}
+  #gate .core{padding:26px 22px;text-align:center}
+  #gate form{text-align:left;margin-top:18px}
+  .gatecat{
+    display:block;width:96px;margin:0 auto 6px;
+    filter:drop-shadow(0 14px 26px rgba(0,0,0,.65)) drop-shadow(0 0 26px rgba(139,92,246,.35))
+  }
+  .adminhead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+  /* always reachable: switching to the lobby or the board is not a host secret */
+  .adminnav{display:flex;justify-content:center;margin-bottom:16px}
+</style>
+</head>
+<body>
+<div id="wrap">
+
+  <div class="adminnav" id="navhost"></div>
+
+  <section id="gate" class="panel">
+    <div class="core">
+      <img class="gatecat" src="img/popcat-closed.png" alt="" aria-hidden="true">
+      <span class="eyebrow"><i class="dot"></i>Host controls</span>
+      <h1>ADMIN<small>Kaizen Pop-Cat event control</small></h1>
+      <form id="gateform">
+        <label class="field"><span>Admin PIN</span>
+        <!-- Was inputmode="numeric" pattern="[0-9]+" maxlength="12". That forced the
+             only credential on the site to be a short number, which is how it ended
+             up as a 2-digit PIN that is brute-forceable in ~100 guesses. Any
+             character, up to 64, so a long random value can actually be used.
+             It is typed once per browser session (sessionStorage), not per action. -->
+          <input id="pin" type="password" required
+                 maxlength="64" title="admin pin" autocomplete="current-password"></label>
+        <button class="btn" type="submit">UNLOCK <span class="ico" aria-hidden="true">→</span></button>
+        <p class="err" id="gateerr"></p>
+      </form>
+    </div>
+  </section>
+
+  <div id="panelwrap" hidden>
+    <div class="adminhead">
+      <h1>ADMIN<small id="whoami"></small></h1>
+      <img class="adi-logo" src="img/adi-logo.svg" alt="Analog Devices">
+    </div>
+
+    <section class="panel">
+      <div class="core">
+        <h2>Round timer</h2>
+        <div id="clock" class="idle">NOT RUNNING</div>
+
+        <div class="field" style="margin:16px 0 0"><span>Round length</span></div>
+        <div class="presets" id="presets">
+          <button class="chip" data-s="30">30s</button>
+          <button class="chip" data-s="40">40s</button>
+          <button class="chip" data-s="50">50s</button>
+          <button class="chip" data-s="60">60s</button>
+          <button class="chip" data-s="90">90s</button>
+          <button class="chip" data-s="120">2m</button>
+          <button class="chip" data-s="300">5m</button>
+        </div>
+        <div class="stepper">
+          <button class="sbtn" data-d="-10">−10</button>
+          <button class="sbtn" data-d="-5">−5</button>
+          <button class="sbtn" data-d="-1">−1</button>
+          <input id="secs" type="number" min="5" max="3600" value="60" inputmode="numeric"
+                 aria-label="Round length in seconds">
+          <button class="sbtn" data-d="1">+1</button>
+          <button class="sbtn" data-d="5">+5</button>
+          <button class="sbtn" data-d="10">+10</button>
+        </div>
+        <p class="secshint" id="secshint"></p>
+
+        <div class="rowbtns" style="margin-top:14px">
+          <button class="btn small" id="startbtn">▶ START ROUND</button>
+          <button class="btn small ghost" id="stopbtn">STOP</button>
+        </div>
+        <p class="secshint">Start zeroes every score first, so warm-up taps in the lobby never carry into the race.</p>
+        <p class="ok" id="roundmsg"></p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="core">
+        <h2>Scores</h2>
+        <button class="btn small danger" id="resetbtn">RESET ALL SCORES TO 0</button>
+        <p class="ok" id="resetmsg"></p>
+      </div>
+    </section>
+
+    <section class="panel danger-zone">
+      <div class="core">
+        <h2>⚠️ Danger zone</h2>
+        <p class="hint">One button for a completely clean slate: stops the round, zeroes every score and
+          <b>deletes every player</b> — names, employee IDs, departments and scores. The board goes empty,
+          the projector's peak records clear and everyone has to join again. This cannot be undone.</p>
+        <button class="btn big danger" id="wipebtn">☠️ RESET EVERYTHING</button>
+        <ol class="steps" id="steps" hidden>
+          <li data-k="round">Stop the round</li>
+          <li data-k="scores">Zero every score</li>
+          <li data-k="players">Delete every player</li>
+          <li data-k="verify">Read the board back and confirm it is empty</li>
+        </ol>
+        <p class="ok" id="wipemsg"></p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="core">
+        <h2>Players (<span id="count">0</span>)</h2>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Name</th><th>Employee ID</th><th>Department</th><th style="text-align:right">Score</th><th></th></tr></thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="sb.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+mountNav('#navhost', 'admin');
+let pin = sessionStorage.getItem('popcat.pin') || '';
+let endsAt = null, startsAt = null;
+// Once the host has touched the round length, the 3s poll must stop overwriting
+// it. That silent overwrite is the "input bounces back" bug on this panel.
+let secsDirty = false;
+
+$('#gateform').addEventListener('submit', async e => {
+  e.preventDefault();
+  $('#gateerr').textContent = '';
+  try { await unlock($('#pin').value); }
+  catch (err) { $('#gateerr').textContent = err.message; }
+});
+
+async function unlock(p) {
+  const data = await rpc('admin_list', { p_pin: p });   // throws on a bad pin
+  pin = p; sessionStorage.setItem('popcat.pin', p);
+  $('#gate').hidden = true; $('#panelwrap').hidden = false;
+  paint(data);
+  // ponytail: no poll while the tab is in the background — the host usually has
+  // this parked behind the projector window for the whole event.
+  setInterval(() => { if (!document.hidden) refresh(); }, 3000);
+  setInterval(tick, 250);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+}
+
+let paintSeq = 0;
+async function refresh() {
+  // A 3s poll runs during the wipe, so replies can overtake each other and an
+  // older list would repaint over a newer one — the same stale-snapshot race the
+  // phone hit. Only the most recent request is allowed to paint.
+  const seq = ++paintSeq;
+  try {
+    const d = await rpc('admin_list', { p_pin: pin });
+    if (seq === paintSeq) paint(d);
+  } catch { /* transient */ }
+}
+
+// ── the players table ──────────────────────────────────────────────────────
+// Rows are kept and patched, never rebuilt. The old code did `tbody.textContent
+// = ''` every 3 seconds, which destroyed whatever score box was being typed in —
+// the caret "bounced out" mid-edit and the keystrokes went nowhere.
+const rowsById = new Map();
+
+function buildRow(p) {
+  const tr = document.createElement('tr');
+  const cell = cls => { const td = document.createElement('td'); if (cls) td.className = cls; tr.append(td); return td; };
+  const r = { tr, name: cell(), eid: cell(), dept: cell(), p };
+
+  const sc = cell('sc');
+  const inp = document.createElement('input');
+  inp.type = 'number'; inp.min = '0'; inp.className = 'scin';
+  inp.title = 'Type a new score, Enter to set';
+  inp.value = p.score;
+  sc.append(inp);
+  r.inp = inp;
+
+  // r.p is re-pointed at the latest server row on every paint, so this compares
+  // against what the server actually holds — not a value captured 3 polls ago.
+  const commit = async () => {
+    const v = Math.max(0, Math.floor(+inp.value || 0));
+    if (v === r.p.score) { inp.value = r.p.score; return; }
+    inp.disabled = true;
+    try {
+      await rpc('admin_set_score', { p_pin: pin, p_player_id: r.p.id, p_score: v });
+      r.p.score = v;
+    } catch (e) {
+      inp.value = r.p.score;                      // put the real number back
+      $('#resetmsg').textContent = 'Could not set score: ' + e.message;
+    } finally {
+      inp.disabled = false;                       // the old code left it stuck on error
+    }
+    refresh();
+  };
+  // Enter blurs and lets blur do the write, so a commit can never fire twice.
+  inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); inp.blur(); } };
+  inp.onblur = commit;
+
+  const act = cell();
+  const b = document.createElement('button');
+  b.className = 'x'; b.textContent = 'remove';
+  b.onclick = async () => {
+    if (!confirm(`Remove ${r.p.username}?`)) return;
+    await rpc('admin_remove_player', { p_pin: pin, p_player_id: r.p.id });
+    refresh();
+  };
+  act.append(b);
+  return r;
+}
+
+function paint(d) {
+  endsAt = d.ends_at; startsAt = d.starts_at || null;
+  $('#whoami').textContent = `${d.players.length} players`;
+  $('#count').textContent = d.players.length;
+
+  const secs = $('#secs');
+  if (!secsDirty && document.activeElement !== secs && d.round_seconds) secs.value = d.round_seconds;
+  paintSecs();
+
+  const tb = $('#tbody');
+  // Moving a DOM node drops the caret inside it, so the reorder pass is skipped
+  // entirely while somebody is typing in this table.
+  const typing = tb.contains(document.activeElement);
+  const seen = new Set();
+  const order = [];
+
+  for (const p of d.players) {
+    seen.add(p.id);
+    let r = rowsById.get(p.id);
+    if (!r) { r = buildRow(p); rowsById.set(p.id, r); tb.append(r.tr); }
+    r.p = p;
+    if (r.name.textContent !== p.username)    r.name.textContent = p.username;
+    if (r.eid.textContent !== p.employee_id)  r.eid.textContent = p.employee_id;
+    if (r.dept.textContent !== p.department)  r.dept.textContent = p.department;
+    // never write into the box that currently has the caret
+    if (document.activeElement !== r.inp && r.inp.value !== String(p.score)) r.inp.value = p.score;
+    order.push(r.tr);
+  }
+  for (const [id, r] of rowsById) if (!seen.has(id)) { r.tr.remove(); rowsById.delete(id); }
+
+  if (!typing) {
+    let same = tb.children.length === order.length;
+    if (same) for (let i = 0; i < order.length; i++) if (tb.children[i] !== order[i]) { same = false; break; }
+    if (!same) tb.append(...order);               // one move, correct order
+  }
+  tick();
+}
+
+// ── round length ───────────────────────────────────────────────────────────
+const SEC_MIN = 5, SEC_MAX = 3600;
+const clampSecs = v => Math.min(SEC_MAX, Math.max(SEC_MIN, Math.round(v) || SEC_MIN));
+const readSecs = () => clampSecs(+$('#secs').value);
+
+function paintSecs() {
+  const v = readSecs();
+  for (const c of document.querySelectorAll('#presets .chip')) c.classList.toggle('on', +c.dataset.s === v);
+  const m = Math.floor(v / 60), s = v % 60;
+  $('#secshint').innerHTML = v >= 60
+    ? `Round will run for <b>${m}m ${String(s).padStart(2, '0')}s</b> after a 5s countdown.`
+    : `Round will run for <b>${v}s</b> after a 5s countdown.`;
+}
+function setSecs(v) { $('#secs').value = clampSecs(v); secsDirty = true; paintSecs(); }
+
+$('#presets').onclick = e => { const c = e.target.closest('.chip'); if (c) setSecs(+c.dataset.s); };
+document.querySelector('.stepper').onclick = e => {
+  const b = e.target.closest('.sbtn'); if (b) setSecs(readSecs() + +b.dataset.d);
+};
+$('#secs').addEventListener('input', () => { secsDirty = true; paintSecs(); });
+$('#secs').addEventListener('blur', () => { $('#secs').value = readSecs(); paintSecs(); });
+
+function tick() {
+  const c = $('#clock');
+  const toStart = msLeft(startsAt), left = msLeft(endsAt);
+  if (startsAt && toStart > 0) {                  // the 5s lead-in
+    c.className = 'hot'; c.textContent = 'GET READY ' + Math.ceil(toStart / 1000);
+    return;
+  }
+  if (endsAt && left > 0) { c.className = left <= 10000 ? 'hot' : ''; c.textContent = clock(left); }
+  else { c.className = 'idle'; c.textContent = endsAt ? 'FINISHED' : 'OPEN PLAY'; }
+}
+
+$('#startbtn').onclick = async () => {
+  const btn = $('#startbtn');
+  /* Everyone must race from 0, so starting clears the warm-up taps people make
+     while they sit in the lobby. From an idle board that destroys nothing worth
+     keeping, so it just happens. Mid-race it would delete the event in front of
+     the room — so the ONE moment it can do damage is the one moment it asks.
+     Reset runs BEFORE start on purpose: if the start call then fails, all that
+     is lost is the warm-up we meant to discard, and the host simply presses it
+     again. The other order can leave a live race running on carried-over scores. */
+  if (endsAt && msLeft(endsAt) > 0 &&
+      !confirm('A round is still running.\n\nStarting a new one sets EVERY score back to 0.\n\nStart anyway?')) return;
+  btn.disabled = true;
+  try {
+    const z = await rpc('admin_reset_scores', { p_pin: pin });
+    const r = await rpc('admin_start_round', { p_pin: pin, p_seconds: readSecs() });
+    secsDirty = false;                            // server value is the truth again
+    $('#roundmsg').textContent = r.starts_at
+      ? `${z.reset} scores back to 0 — countdown running, ${r.seconds}s race starts in 5.`
+      : `${z.reset} scores back to 0 — round running for ${r.seconds}s.`;
+  } catch (e) { $('#roundmsg').textContent = 'Failed: ' + e.message; }
+  finally { btn.disabled = false; }
+  refresh();
+};
+$('#stopbtn').onclick = async () => {
+  await rpc('admin_stop_round', { p_pin: pin });
+  $('#roundmsg').textContent = 'Round stopped.';
+  refresh();
+};
+$('#resetbtn').onclick = async () => {
+  if (!confirm('Set EVERY player score back to 0?')) return;
+  const r = await rpc('admin_reset_scores', { p_pin: pin });
+  $('#resetmsg').textContent = `${r.reset} scores reset.`;
+  refresh();
+};
+const step = (k, cls) => { const el = document.querySelector(`#steps li[data-k="${k}"]`); if (el) el.className = cls || ''; };
+
+/* One button, one clean slate. Order matters: stop the round first so nothing can
+   be scored while we clear, then zero the scores, then delete the rows. Zeroing
+   before deleting also drops the board total, which is exactly the signal the
+   projector watches to retire its saved peak records — so the big screen cleans
+   itself without anyone touching it. */
+$('#wipebtn').onclick = async () => {
+  if (!confirm('RESET EVERYTHING?\n\nStops the round, zeroes every score and deletes every player.\nThe board will be completely empty.')) return;
+  if (!confirm('Last check — this cannot be undone.\n\nDelete all players and start clean?')) return;
+  const b = $('#wipebtn'), msg = $('#wipemsg'), steps = $('#steps');
+  b.disabled = true; steps.hidden = false; msg.textContent = '';
+  for (const li of steps.querySelectorAll('li')) li.className = '';
+  try {
+    step('round', 'run');
+    try { await rpc('admin_stop_round', { p_pin: pin }); step('round', 'done'); }
+    catch { step('round', 'fail'); }
+
+    step('scores', 'run');
+    try { await rpc('admin_reset_scores', { p_pin: pin }); step('scores', 'done'); }
+    catch { step('scores', 'fail'); }
+
+    // No custom SQL needed: read the roster, then remove each player with the RPC
+    // that is already live. Small parallel batches so 100+ players clear in seconds
+    // without flooding the free-tier connection pool.
+    step('players', 'run');
+    const list = await rpc('admin_list', { p_pin: pin });
+    const players = (list && list.players) || [];
+    let done = 0, failed = 0, firstErr = '';
+    for (let i = 0; i < players.length; i += 5) {
+      await Promise.all(players.slice(i, i + 5).map(async p => {
+        try { await rpc('admin_remove_player', { p_pin: pin, p_player_id: p.id }); done++; }
+        catch (e) { failed++; if (!firstErr) firstErr = e.message || String(e); }
+      }));
+      msg.textContent = `Deleting ${Math.min(i + 5, players.length)} / ${players.length}…`;
+    }
+    step('players', failed ? 'fail' : 'done');
+
+    // Never trust the deletes: read the board back and sweep anything that survived
+    // (a phone can also re-join mid-wipe). Last pass is a read-only confirmation.
+    step('verify', 'run');
+    let left = [];
+    for (let pass = 0; pass < 4; pass++) {
+      const after = await rpc('admin_list', { p_pin: pin });
+      left = (after && after.players) || [];
+      if (!left.length || pass === 3) break;
+      for (const p of left) { try { await rpc('admin_remove_player', { p_pin: pin, p_player_id: p.id }); } catch { } }
+    }
+    step('verify', left.length ? 'fail' : 'done');
+
+    msg.textContent = left.length
+      ? `${done} deleted, but ${left.length} still on the board${firstErr ? ' — ' + firstErr : ''}. Press again.`
+      : `Clean slate — ${done} player${done === 1 ? '' : 's'} deleted, scores zeroed, round stopped.`;
+    // Repaint before handing the button back, or the table can still show rows from
+    // a mid-wipe poll while the message says "Clean slate" — which reads as a failure
+    // and invites pressing it again.
+    await refresh();
+  } catch (e) { msg.textContent = 'Failed: ' + (e.message || e); }
+  finally { b.disabled = false; }
+};
+
+if (pin) unlock(pin).catch(() => sessionStorage.removeItem('popcat.pin'));
+</script>
+</body>
+</html>

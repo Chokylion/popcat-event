@@ -1,0 +1,20 @@
+# Dev-only files must never be served from the event site.
+# schema.sql in particular contains the admin PIN, and anything reachable at
+# https://popcat-event.vercel.app/<name> is world-readable.
+*.sql
+score-backup.json
+sum.md
+README.md
+*.mjs
+shots
+# Full-resolution QA screenshots of the lobby and race board. They show real
+# employee names and departments, so they are PII even though they are "just
+# screenshots" -- and anything not listed here is world-readable.
+lookshots
+# Vercel's own project metadata (project + org id). Not a credential, but it
+# has no business being fetchable from the event site.
+.vercel
+.claude
+# Perf-harness calibration page: a blank control used to prove the measuring
+# rig is honest before trusting a frame-time number. Not part of the event.
+blank-control.html

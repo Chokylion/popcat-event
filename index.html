@@ -1,0 +1,940 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#08060f">
+<title>Kaizen Pop-Cat</title>
+<!-- 100 phones on one wifi: pay the DNS + TLS handshake to Supabase up front,
+     not at the moment someone is trying to join -->
+<link rel="preconnect" href="https://YOUR-PROJECT.supabase.co" crossorigin>
+<link rel="stylesheet" href="style.css">
+<link rel="preload" as="image" href="img/popcat-closed.png">
+<link rel="preload" as="image" href="img/popcat-open.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- non-blocking: the corporate network can be slow to Google, the page must never wait -->
+<link rel="stylesheet" media="print" onload="this.media='all'"
+      href="https://fonts.googleapis.com/css2?family=Anton&family=Space+Grotesk:wght@400;500;600;700&display=swap">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎃</text></svg>">
+<style>
+  body{overflow:hidden}
+
+  /* ══ JOIN ══════════════════════════════════════════════ */
+  #join{min-height:100dvh;display:grid;place-items:center;padding:14px 18px;overflow:auto}
+  .joinwrap{width:min(430px,100%);position:relative}
+  .joincat{
+    display:block;width:118px;margin:0 auto -30px;position:relative;z-index:2;
+    filter:drop-shadow(0 18px 30px rgba(0,0,0,.7)) drop-shadow(0 0 34px rgba(255,122,26,.4));
+    animation:bob 5s ease-in-out infinite
+  }
+  @keyframes bob{50%{transform:translateY(-8px) rotate(-3deg)}}
+  #join .core{padding:42px 22px 16px;text-align:center}
+  #join h1{
+    margin:12px 0 6px;font-size:clamp(29px,8.5vw,42px);line-height:.95;
+    background:linear-gradient(180deg,#fff 6%,var(--ember) 52%,var(--pumpkin));
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 10px 28px rgba(255,122,26,.35))
+  }
+  #join p.sub{margin:0 0 16px;color:var(--dim);font-size:13px;line-height:1.55}
+  #joinform{text-align:left}
+  .loginrow{margin:12px 0 0;text-align:center;font-size:11.5px;color:var(--dim)}
+  .loginrow a{color:var(--pumpkin);cursor:pointer;font-weight:600;white-space:nowrap}
+  .loginrow a:hover{text-decoration:underline}
+  .joinfoot{
+    margin:12px 0 0;display:flex;align-items:center;justify-content:center;gap:.7em;
+    font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#6b6190
+  }
+  /* the switcher lives on the join screen only — never beside the cat, where a
+     link next to a target being hit 45 times a second is an accidental exit */
+  .joinnav{display:flex;justify-content:center;margin-top:10px}
+  /* …and on the tap screen it is parked in the BOTTOM row, below the chase
+     strip: still one thumb-reach away, but a whole panel south of the cat, so
+     a frantic tap can never clip it. It replaces the old 🏆/⚙️ bar icons. */
+  .playnav{display:flex;justify-content:center;margin-top:7px}
+  .playnav .nav{padding:3px}
+  .playnav .nav a{padding:6px 11px;font-size:9px}
+  /* short phones (old Androids at 640dp) — the join card is a form, so it may
+     scroll, but trim it hard so most of them do not have to */
+  @media (max-height:720px){
+    .joincat{width:72px;margin-bottom:-18px}
+    #join .core{padding:24px 20px 12px}
+    #join h1{margin:6px 0 4px}
+    /* flavour text, not instructions — the field labels carry those */
+    #join p.sub{display:none}
+    #joinform .err:empty{display:none}
+    .joinfoot{margin-top:8px}
+    .joinnav{margin-top:7px}
+    .playnav{margin-top:5px}
+    .playnav .nav a{padding:5px 9px}
+  }
+
+  /* ══ PLAY — exactly one viewport, four rows ════════════ */
+  #play{
+    height:100dvh;display:grid;grid-template-rows:auto auto 1fr auto;gap:6px;
+    padding:calc(env(safe-area-inset-top) + 10px) 12px calc(env(safe-area-inset-bottom) + 10px)
+  }
+  .bar{display:flex;align-items:center;gap:8px;min-width:0}
+  .who{min-width:0;flex:1}
+  .who b{display:block;font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .who span{font-size:10px;color:var(--dim);letter-spacing:.16em;text-transform:uppercase;font-weight:600}
+
+  #timer{
+    font-family:var(--font-display);font-variant-numeric:tabular-nums;font-size:21px;
+    padding:6px 14px;border-radius:999px;background:var(--glass);border:1px solid var(--hair);
+    box-shadow:var(--inset);line-height:1.15
+  }
+  #timer.hot{
+    color:var(--blood);border-color:rgba(255,46,85,.6);
+    box-shadow:0 0 26px -6px rgba(255,46,85,.8), var(--inset);animation:tick 1s infinite
+  }
+  #timer.idle{font-size:11px;letter-spacing:.16em;color:var(--dim);font-family:var(--font-ui);font-weight:600}
+  #timer.open{
+    font-size:12px;letter-spacing:.18em;font-family:var(--font-ui);font-weight:700;
+    color:#7CFFB2;border-color:rgba(124,255,178,.5);box-shadow:0 0 20px -8px rgba(124,255,178,.7), var(--inset)
+  }
+  @keyframes tick{50%{transform:scale(1.07)}}
+
+  .iconbtn{
+    background:var(--glass);border:1px solid var(--hair);border-radius:13px;
+    width:38px;height:38px;display:grid;place-items:center;font-size:16px;flex:none;
+    text-decoration:none;color:inherit;
+    box-shadow:var(--inset);transition:transform .4s var(--spring)
+  }
+  .iconbtn:active{transform:scale(.92)}
+  /* a switched-off sound button must LOOK off — the emoji alone is too small to
+     read at arm's length on a phone held mid-tap */
+  .iconbtn.off{opacity:.42;border-color:var(--hair-soft)}
+
+  .scorewrap{text-align:center;line-height:1}
+  #score{
+    font-family:var(--font-display);font-size:clamp(48px,17vw,88px);letter-spacing:-.01em;
+    font-variant-numeric:tabular-nums;
+    filter:drop-shadow(0 6px 30px rgba(255,122,26,.45))
+  }
+  /* three layers so nothing ever fights over `transform`:
+     #score = shake · #scoreWrap = heat scale · #scoreN = per-tap punch */
+  #scoreWrap{display:inline-block;transition:transform .3s var(--pop);will-change:transform}
+  #scoreN{display:inline-block;will-change:transform;
+    background:linear-gradient(180deg,#fff 10%,var(--ember) 60%,var(--pumpkin));
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  @keyframes shakeS{0%,100%{transform:translate3d(0,0,0) rotate(0)}
+    25%{transform:translate3d(-2px,1px,0) rotate(-.7deg)}
+    50%{transform:translate3d(2px,-1px,0) rotate(.7deg)}
+    75%{transform:translate3d(-1px,-1.5px,0) rotate(-.4deg)}}
+  @keyframes shakeB{0%,100%{transform:translate3d(0,0,0) rotate(0)}
+    20%{transform:translate3d(-5px,3px,0) rotate(-1.8deg)}
+    40%{transform:translate3d(5px,-3px,0) rotate(1.8deg)}
+    60%{transform:translate3d(-4px,-3px,0) rotate(-1.3deg)}
+    80%{transform:translate3d(4px,2px,0) rotate(1.3deg)}}
+  #score.s3{animation:blazeglow .6s ease-in-out infinite,shakeS .22s linear infinite}
+  #score.s4{animation:blazeglow .45s ease-in-out infinite,shakeB .17s linear infinite}
+  #score.s5{animation:blazeglow .3s ease-in-out infinite,shakeB .11s linear infinite}
+  @keyframes catrumble{0%,100%{transform:translate3d(0,0,0)}
+    25%{transform:translate3d(-3px,2px,0)}50%{transform:translate3d(3px,-2px,0)}
+    75%{transform:translate3d(-2px,-3px,0)}}
+  #stage.h3 #cat img{animation:catrumble .2s linear infinite}
+  #stage.h4 #cat img{animation:catrumble .15s linear infinite}
+  #stage.h5 #cat img{animation:catrumble .1s linear infinite}
+  /* full-screen heat wash — opacity only, so it costs nothing */
+  #heat{position:fixed;inset:0;z-index:4;pointer-events:none;opacity:0;
+    transition:opacity .32s linear;mix-blend-mode:screen;
+    background:radial-gradient(ellipse at 50% 118%,rgba(255,80,0,.6),transparent 56%),
+               radial-gradient(ellipse at 50% -18%,rgba(255,140,20,.45),transparent 56%)}
+  /* ══ stat cards — rank / pop-per-sec / personal peak ══════════════════════
+     Each card is a static bezel with its own shimmer band. The band moves by
+     TRANSFORM only, and the glow sits on the card, never on the numeral that
+     changes 30x a second — that keeps the shimmer free. */
+  #meta{margin-top:7px;display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .mstat{position:relative;overflow:hidden;border-radius:13px;padding:.42em .3em .38em;
+    background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.02));
+    border:1px solid rgba(255,255,255,.12);
+    box-shadow:inset 0 1px 1px rgba(255,255,255,.14),0 6px 18px -12px #000;
+    display:flex;flex-direction:column;align-items:center;gap:.12em;line-height:1}
+  .mstat::after{content:"";position:absolute;top:0;bottom:0;left:0;width:45%;pointer-events:none;
+    background:linear-gradient(105deg,transparent 36%,rgba(255,255,255,.16) 50%,transparent 64%);
+    transform:translate3d(-120%,0,0);will-change:transform;animation:mshine 4.6s linear infinite}
+  #stCps::after{animation-duration:3.4s}
+  #stPeak::after{animation-duration:5.6s}
+  @keyframes mshine{to{transform:translate3d(340%,0,0)}}
+  .mstat b{font-family:var(--font-display);font-size:23px;font-variant-numeric:tabular-nums;
+    line-height:1;color:#fff;display:block}
+  .mstat i{font-size:8.5px;font-style:normal;font-weight:800;letter-spacing:.17em;
+    text-transform:uppercase;color:var(--dim)}
+  .mstat i span{opacity:.75}
+  /* a thin lit edge on top of each card so the three read as instruments */
+  .mstat::before{content:"";position:absolute;left:18%;right:18%;top:0;height:1px;
+    background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent)}
+  #stRank b{color:var(--adi)}
+  #stPeak b{color:#ffdf6e}
+  #stPeak{border-color:rgba(255,213,120,.3)}
+  /* podium colours for your own rank card */
+  #stRank.r1{border-color:rgba(255,213,120,.75);box-shadow:inset 0 1px 1px rgba(255,255,255,.25),0 0 22px -6px rgba(255,190,60,.95)}
+  #stRank.r1 b{color:#ffd76b}
+  #stRank.r2{border-color:rgba(226,233,245,.6)} #stRank.r2 b{color:#eef2fa}
+  #stRank.r3{border-color:rgba(205,127,50,.62)} #stRank.r3 b{color:#f0b27a}
+
+  /* ══ speed effects — clicks/s heats up in fire, step every 3: 3/6/9/12/15.
+     `blazeglow` animates a stacked drop-shadow, which does repaint the glyphs
+     every frame. It was rewritten as an opacity pulse on an unfiltered pseudo
+     and A/B'd old-vs-new, 4 interleaved reps at 45 taps/s: taps landed 219 vs
+     219 (identical in all four pairs), cpu 34.6% vs 34.4%, frame p95 16.8ms
+     both. Only RecalcStyle moved (71 -> 61ms/s, consistent 4/4) and that is
+     ~9ms of a 34% budget. Not worth changing an approved look for, so the
+     original stays. The score is ONE element — this is not the same situation
+     as a per-row effect on a 1920 board. ══ */
+  @keyframes blazeglow{0%,100%{filter:drop-shadow(0 0 10px #ffd23a) drop-shadow(0 0 24px #ff5a1a)}
+    50%{filter:drop-shadow(0 0 18px #fff) drop-shadow(0 0 40px #ff2a00)}}
+  @keyframes firepulse{50%{transform:scale(1.14)}}
+  #cps{display:inline-block;font-variant-numeric:tabular-nums;font-weight:800;transition:color .2s}
+  #cps.t1{color:#ffcf6e}
+  #cps.t2{color:#ff9a2e}
+  #cps.t3,#cps.t4,#cps.t5{
+    background:linear-gradient(92deg,#ff2a00,#ff8a00 38%,#ffd23a 62%,#ff6a00);
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  #cps.t4{will-change:transform;animation:firepulse 1s ease-in-out infinite}
+  #cps.t5{will-change:transform;animation:firepulse .55s ease-in-out infinite}
+  /* the card glows, not the digits — glow is painted once, digits stay cheap */
+  #stCps.t3{border-color:rgba(255,120,0,.5);box-shadow:inset 0 1px 1px rgba(255,255,255,.2),0 0 20px -6px rgba(255,90,0,.9)}
+  #stCps.t4{border-color:rgba(255,90,0,.7);box-shadow:inset 0 1px 1px rgba(255,255,255,.24),0 0 26px -5px rgba(255,80,0,1)}
+  #stCps.t5{border-color:rgba(255,220,150,.9);box-shadow:inset 0 1px 1px rgba(255,255,255,.3),0 0 34px -4px rgba(255,120,0,1)}
+  #score.blaze{animation:blazeglow .6s ease-in-out infinite}
+
+  /* ══ the cat ═══════════════════════════════════════════ */
+  #stage{
+    position:relative;display:grid;place-items:center;min-height:0;
+    touch-action:manipulation;user-select:none;-webkit-user-select:none
+  }
+  #stage::before{
+    content:"";position:absolute;width:78%;aspect-ratio:1;border-radius:50%;
+    background:radial-gradient(circle, rgba(255,122,26,.30), transparent 68%);
+    filter:blur(14px);animation:breathe 3.6s ease-in-out infinite
+  }
+  @keyframes breathe{50%{transform:scale(1.1);opacity:.75}}
+  #cat{
+    position:relative;width:100%;height:100%;display:grid;place-items:center;
+    transition:transform .07s var(--pop)
+  }
+  #cat img{
+    position:absolute;max-width:min(78vw,100%);max-height:100%;object-fit:contain;
+    filter:drop-shadow(0 18px 34px rgba(0,0,0,.6));
+    transition:opacity .05s linear
+  }
+  .m-open{opacity:0}
+  #stage.popped #cat{transform:scale(.93)}
+  #stage.popped .m-closed{opacity:0}
+  #stage.popped .m-open{opacity:1}
+
+  .float{
+    position:absolute;pointer-events:none;font-family:var(--font-display);font-size:24px;
+    color:var(--ember);text-shadow:0 2px 12px rgba(0,0,0,.8), 0 0 20px rgba(255,193,77,.7);
+    will-change:transform,opacity
+  }
+  .float.f3{color:#ff9a2e;text-shadow:0 2px 12px rgba(0,0,0,.8),0 0 28px rgba(255,140,40,1)}
+  .float.f5{color:#fff;text-shadow:0 0 8px #fff,0 0 22px #ff5a1a,0 0 44px #ff2a00}
+  #hint{
+    position:absolute;bottom:0;font-size:10px;color:var(--dim);letter-spacing:.24em;
+    text-transform:uppercase;pointer-events:none;font-weight:600
+  }
+
+  /* ══ chase strip ═══════════════════════════════════════ */
+  #chase{display:grid;gap:5px;font-size:15px;--rank-w:2.4em}
+  #chase .row{padding:.44em .75em}
+  /* ══ next-opponent panel — who you are actually racing ══ */
+  #gap{
+    position:relative;overflow:hidden;margin-top:6px;border-radius:13px;min-height:14px;
+    padding:.46em .8em;display:flex;align-items:center;justify-content:center;gap:.45em;
+    font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);
+    background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02));
+    border:1px solid rgba(255,255,255,.11);
+    box-shadow:inset 0 1px 1px rgba(255,255,255,.12),0 6px 18px -12px #000;
+    transition:border-color .3s,box-shadow .3s
+  }
+  #gap::after{content:"";position:absolute;top:0;bottom:0;left:0;width:45%;pointer-events:none;
+    background:linear-gradient(105deg,transparent 36%,rgba(255,255,255,.14) 50%,transparent 64%);
+    transform:translate3d(-120%,0,0);will-change:transform;animation:mshine 3.8s linear infinite}
+  #gap .gname{font-family:var(--font-display);font-size:14px;letter-spacing:.02em;color:#fff;
+    max-width:38vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #gap .gnum{font-family:var(--font-display);font-size:15px;color:var(--pumpkin);
+    font-variant-numeric:tabular-nums}
+  #gap.close{border-color:rgba(255,90,0,.7);
+    box-shadow:inset 0 1px 1px rgba(255,255,255,.2),0 0 24px -6px rgba(255,90,0,1)}
+  #gap.lead{border-color:rgba(255,213,120,.75);
+    box-shadow:inset 0 1px 1px rgba(255,255,255,.22),0 0 24px -6px rgba(255,190,60,.95)}
+  #gap.lead .gnum{color:#ffd76b}
+</style>
+</head>
+<body class="noscroll">
+<div id="heat" aria-hidden="true"></div>
+
+<!-- ══ JOIN ══ -->
+<section id="join">
+  <div class="joinwrap">
+    <img class="joincat" src="img/popcat-open.png" alt="" aria-hidden="true">
+    <div class="bezel">
+      <div class="core">
+        <span class="eyebrow"><i class="dot"></i>Halloween 2026</span>
+        <h1 id="evtname">KAIZEN POP-CAT</h1>
+        <p class="sub">Sign in, then tap the pumpkin cat as fast as you can.<br>Every tap counts for you <em>and</em> your department.</p>
+        <form id="joinform">
+          <label class="field"><span>Name</span>
+            <input id="f-name" maxlength="24" autocomplete="name" required placeholder="e.g. Kittipong"></label>
+          <label class="field"><span>Employee ID</span>
+            <!-- inputmode is only a KEYBOARD HINT -- a browser may ignore it and it
+                 stops nothing that is pasted or scripted. The live data proves it:
+                 ids of 5, 6 and 15 digits all got through. pattern is a real
+                 constraint, and the database now enforces the same rule, because
+                 anything checked only here can be bypassed by calling the RPC. -->
+            <input id="f-id" maxlength="7" inputmode="numeric" pattern="[0-9]{7}"
+                   title="exactly 7 digits" required placeholder="e.g. 1234567"></label>
+          <label class="field"><span>Department</span>
+            <select id="f-dept" required>
+              <option value="" disabled selected>Select your department…</option>
+            </select></label>
+          <button class="btn" type="submit">LET ME POP <span class="ico" aria-hidden="true">↗</span></button>
+          <p class="err" id="joinerr"></p>
+          <p class="loginrow">Already joined on another phone? <a id="loginlink" role="button" tabindex="0">Log in with just your ID →</a></p>
+        </form>
+        <p class="joinfoot">
+          <img class="adi-logo" src="img/adi-logo.svg" alt="Analog Devices">
+        </p>
+        <div class="joinnav" id="navhost"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ PLAY ══ -->
+<section id="play" hidden>
+  <div class="bar">
+    <div class="who"><b id="pname"></b><span id="pdept"></span></div>
+    <div id="timer" class="idle">WARM UP</div>
+    <button class="iconbtn" id="mute" title="Tap sound">🔊</button>
+    <button class="iconbtn" id="btnmusic" title="Backing music">🎶</button>
+    <button class="iconbtn" id="leave" title="Leave"><svg viewBox="0 0 24 24" width="1.05em" height="1.05em" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" aria-hidden="true"><path d="M12 3.2v8.4"/><path d="M6.1 6.5a8.2 8.2 0 1 0 11.8 0"/></svg></button>
+  </div>
+
+  <div class="scorewrap">
+    <div id="score"><span id="scoreWrap"><span id="scoreN">0</span></span></div>
+    <div id="meta">
+      <div class="mstat" id="stRank"><b id="rank">–</b><i>rank<span id="total"></span></i></div>
+      <div class="mstat" id="stCps"><b id="cps">0.0</b><i>pop/s</i></div>
+      <div class="mstat" id="stPeak"><b id="peak">0.0</b><i>peak/s</i></div>
+    </div>
+  </div>
+
+  <div id="stage">
+    <div id="cat">
+      <img class="m-closed" src="img/popcat-closed.png" alt="Pop cat">
+      <img class="m-open" src="img/popcat-open.png" alt="" aria-hidden="true">
+    </div>
+    <div id="hint">tap the cat</div>
+  </div>
+
+  <div>
+    <div id="chase"></div>
+    <div id="gap"></div>
+    <div class="playnav" id="playnavhost"></div>
+  </div>
+</section>
+
+<script src="config.js"></script>
+<script src="sb.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+const KEY = 'popcat.player';
+let me = null, score = 0, pending = 0, sending = 0, endsAt = null, startsAt = null, state = 'idle';
+let muted = localStorage.getItem('popcat.muted') === '1';
+let taps = [];
+
+/* Sound is two switches now: the blip is feedback for YOUR tap, the track is
+   atmosphere. Music defaults OFF on a phone — a hundred handsets playing the
+   same file a second apart is noise, and the 3 MB is only fetched if somebody
+   actually asks for it. `muted` stays as the blip's flag so the tap hot path
+   keeps reading one boolean instead of a property lookup. */
+Snd.init({ musicDefault: false, volume: 0.35 });
+muted = !Snd.sfx;
+
+// cached hot-path refs — never re-query or re-measure while the user is tapping
+const scoreEl = $('#score'), scoreWrap = $('#scoreWrap'), scoreN = $('#scoreN');
+const stageEl = $('#stage'), heatEl = $('#heat'), cpsEl = $('#cps');
+const peakEl = $('#peak'), stCpsEl = $('#stCps'), stRankEl = $('#stRank');
+let peakCps = 0;
+const floatPool = [];
+let heatK = 0, heatTier = 0, punchT = null, _rect = null;
+function stageRect() { return _rect || (_rect = stageEl.getBoundingClientRect()); }
+const dropRect = () => { _rect = null; };
+addEventListener('resize', dropRect);
+addEventListener('orientationchange', dropRect);
+visualViewport?.addEventListener('resize', dropRect);
+
+// ── join ──────────────────────────────────────────────────
+$('#evtname').textContent = CFG.EVENT_NAME;
+mountNav('#navhost', 'play');
+mountNav('#playnavhost', 'play');
+for (const d of CFG.DEPARTMENTS) {
+  const o = document.createElement('option'); o.value = d; o.textContent = d; $('#f-dept').append(o);
+}
+// ponytail: wake a sleeping free-tier DB while the user types name/dept/id,
+// so the first join is instant instead of a scary cold-start pause.
+rpc('get_board', { p_limit: 1 }).catch(() => {});
+
+$('#joinform').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = e.target.querySelector('button'); btn.disabled = true;
+  $('#joinerr').textContent = '';
+  try {
+    const p = await rpc('join_game', {
+      p_employee_id: $('#f-id').value, p_username: $('#f-name').value,
+      p_department: $('#f-dept').value
+    });
+    localStorage.setItem(KEY, JSON.stringify(p));
+    start(p);
+  } catch (err) { $('#joinerr').textContent = err.message; }
+  btn.disabled = false;
+});
+
+// log in an existing player with only their employee id (returning on another device)
+async function loginById() {
+  const id = $('#f-id').value.trim();
+  $('#joinerr').textContent = '';
+  if (!id) { $('#joinerr').textContent = 'Type your employee ID above first.'; $('#f-id').focus(); return; }
+  const link = $('#loginlink'); link.style.pointerEvents = 'none';
+  try {
+    const p = await rpc('login_game', { p_employee_id: id });
+    localStorage.setItem(KEY, JSON.stringify(p));
+    start(p);
+  } catch (err) { $('#joinerr').textContent = err.message; }
+  link.style.pointerEvents = '';
+}
+$('#loginlink').onclick = loginById;
+$('#loginlink').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); loginById(); } });
+
+// ── play ──────────────────────────────────────────────────
+function start(p) {
+  me = p; score = Number(p.score || 0);
+  // your best click/s is earned once — a refresh must never take it away
+  peakCps = Number(p.peak) || 0;
+  peakEl.textContent = peakCps.toFixed(1);
+  endsAt = p.ends_at || CFG.EVENT_END || null; startsAt = p.starts_at;
+  $('#join').hidden = true; $('#play').hidden = false;
+  $('#pname').textContent = p.username; $('#pdept').textContent = p.department;
+  scoreN.textContent = num(score);
+  paintSnd();
+  saveMe();
+  tick();
+  if (start._armed) return;        // rejoining must never stack a second loop/timer
+  start._armed = true;
+  // ponytail: ONE self-scheduling network loop (see loop()/pace()). Jittered start
+  // so 100 phones never hit the server on the same tick.
+  setTimeout(loop, 200 + Math.random() * 700);
+  setInterval(tick, 200);
+}
+
+/* Keep the saved player in step with the score on screen. The old code stored the
+   join payload once — and that payload always says score 0 — so every refresh
+   flashed 0 and waited on the network to put the real number back. */
+let saveDue = 0;
+function saveMe(force) {
+  if (!me) return;
+  const now = Date.now();
+  if (!force && now < saveDue) return;
+  saveDue = now + 1000;
+  try { localStorage.setItem(KEY, JSON.stringify({ ...me, score, peak: peakCps })); } catch { /* private mode */ }
+}
+
+/* The player row can disappear (admin reset) or the id can go stale, and the server
+   answers a dead id with HTTP 200 + score 0 + live:true — no error whatsoever — which
+   used to drag the score back to zero on every single flush. Rebuild the session from
+   the employee id instead of believing that 0. */
+let recovering = false;
+async function recoverSession() {
+  if (recovering || !me || !me.employee_id) return false;
+  recovering = true;
+  try {
+    let p = null, gone = false;
+    try { p = await rpc('login_game', { p_employee_id: me.employee_id }); }
+    catch (e) { gone = !!e.http; }   // the server answered "no such id"; no .http means no signal
+    if (!p || !p.id) {
+      // Only bounce when the row is CONFIRMED deleted. Re-joining automatically
+      // would put a just-deleted player straight back on the board, so an admin
+      // reset could never actually clear it.
+      if (gone) { eventReset(); return false; }
+      return false;                  // offline: keep playing, try again next flush
+    }
+    me = p; lowStreak = 0; deadHint = 0;
+    // only the id had gone stale — keep whichever total is higher, never lose progress
+    score = Math.max(score, Number(p.score || 0));
+    scoreN.textContent = num(score);
+    saveMe(true);
+    return true;
+  } catch { /* offline — try again next poll */ } finally { recovering = false; }
+  return false;
+}
+
+/* Hand the phone back to the join screen with everything still typed in, so
+   re-entering the game after a reset is one tap and nobody retypes their ID. */
+function eventReset() {
+  try {
+    sessionStorage.setItem('popcat.rejoin', JSON.stringify({
+      username: me.username, department: me.department, employee_id: me.employee_id
+    }));
+    localStorage.removeItem(KEY);
+  } catch { /* private mode: they just retype */ }
+  location.reload();                 // cleanest way to drop every timer and loop
+}
+
+function click(x, y) {
+  if (state !== 'live') { bounce(); return; }
+  score++; pending++; taps.push(performance.now());
+  scoreN.textContent = num(score);
+  bounce(); float(x, y);
+}
+
+/* ── hot path: runs up to 20x/sec, so it must never read layout ──
+   the old version forced a reflow (offsetWidth) and measured the stage on every
+   single tap. Both are gone: refs are cached, the punch is a compositor-only
+   Web Animation, and the floating "+1" nodes are recycled from a pool. */
+function bounce() {
+  stageEl.classList.add('popped');
+  clearTimeout(bounce.t); bounce.t = setTimeout(() => stageEl.classList.remove('popped'), 90);
+  punchT && punchT.cancel();
+  punchT = scoreN.animate(
+    [{ transform: 'scale(1)' },
+     { transform: 'scale(' + (1.08 + heatK * .14).toFixed(3) + ')', offset: .42 },
+     { transform: 'scale(1)' }],
+    { duration: 140, easing: 'cubic-bezier(.2,.9,.2,1)' });
+  pop(muted); navigator.vibrate?.(10);
+}
+
+function float(x, y) {
+  const r = stageRect();
+  let el = floatPool.pop();
+  if (!el) { el = document.createElement('div'); stageEl.append(el); }
+  el.className = 'float' + (heatK >= .8 ? ' f5' : heatK >= .55 ? ' f3' : '');
+  el.textContent = '+1';
+  el.style.left = (x - r.left) + 'px';
+  el.style.top = (y - r.top) + 'px';
+  el.style.opacity = '1';
+  const rise = -66 - (heatK * 40 | 0);
+  const a = el.animate(
+    [{ transform: 'translate(-50%,0) scale(1)', opacity: 1 },
+     { transform: `translate(-50%,${rise}px) scale(${(1.45 + heatK * .5).toFixed(2)}) rotate(${(Math.random() * 30 - 15) | 0}deg)`, opacity: 0 }],
+    { duration: 640, easing: 'cubic-bezier(.2,.9,.2,1)' });
+  a.onfinish = () => { el.style.opacity = '0'; if (floatPool.length < 24) floatPool.push(el); else el.remove(); };
+}
+
+$('#stage').addEventListener('pointerdown', e => { e.preventDefault(); click(e.clientX, e.clientY); });
+addEventListener('keydown', e => {
+  if ((e.code === 'Space' || e.code === 'Enter') && !$('#play').hidden && document.activeElement === document.body) {
+    e.preventDefault();
+    const r = $('#stage').getBoundingClientRect();
+    click(r.left + r.width / 2, r.top + r.height / 2);
+  }
+});
+function paintSnd() {
+  $('#mute').textContent = Snd.sfx ? '🔊' : '🔇';
+  $('#mute').classList.toggle('off', !Snd.sfx);
+  $('#btnmusic').textContent = Snd.music ? '🎵' : '🎶';
+  $('#btnmusic').classList.toggle('off', !Snd.music);
+}
+$('#mute').onclick = () => { muted = !Snd.setSfx(!Snd.sfx); paintSnd(); };
+$('#btnmusic').onclick = () => { Snd.setMusic(!Snd.music); paintSnd(); };
+paintSnd();
+$('#leave').onclick = () => { flush(); localStorage.removeItem(KEY); location.reload(); };
+
+// ── sync ──────────────────────────────────────────────────
+// keep round clock in sync; a brand-new race (new starts_at in the future) zeroes my local counters
+function syncRound(s, e) {
+  // no server round (open play) -> fall back to the event-wide deadline, so the
+  // game stays clickable for days but still ends itself on the final date
+  endsAt = e || CFG.EVENT_END || null;
+  if (s !== startsAt) {
+    startsAt = s;
+    if (s && msLeft(s) > 0) {
+      score = 0; pending = 0; taps = []; lastRank = null;
+      scoreN.textContent = '0';
+    }
+  }
+}
+
+// ── adaptive network loop ─────────────────────────────────────────────────
+// Load-test lesson: a fixed setInterval keeps firing while the server is slow,
+// so every phone stacks 3-4 concurrent requests and the pile-up is what kills
+// the DB. Here exactly ONE request is in flight per phone, the next one is
+// scheduled only after the previous finishes, and the pace tracks real server
+// latency — 100 phones spamming automatically ease off instead of dog-piling.
+let netLat = 300, errStreak = 0, solo = false, boardDue = 0, lowStreak = 0, deadHint = 0;
+// The server clamps ONE add_score to 80 clicks as anti-cheat and reports no error
+// when it does — the reply is just a smaller number. Anything offered above this
+// is therefore lost silently, so the client must never offer more.
+const MAX_FLUSH = 80;
+// Recover fast, back off slow: one freak 6s reply used to poison the pace for a
+// minute and let clicks pile up unsent. Good news moves netLat 0.5, bad news 0.2.
+function noteOk(ms) { netLat += (ms - netLat) * (ms < netLat ? 0.5 : 0.2); errStreak = 0; }
+function noteErr() { errStreak++; netLat = Math.min(8000, netLat * 1.6); }
+
+function pace() {
+  const d = netLat < 250 ? 900 : netLat < 600 ? 1200 : netLat < 1200 ? 1800
+          : netLat < 2500 ? 3000 : 5000;
+  const back = errStreak ? Math.min(8, 2 ** Math.min(errStreak, 3)) : 1;
+  let ms = Math.min(20000, d * back);
+  // Banking the backlog before it reaches MAX_FLUSH is a deadline, not a preference.
+  // Measured on a real phone at 39 clicks/s the old "pending > 20 -> 400ms" rule
+  // fired on literally every cycle (costing requests) and batches STILL arrived at
+  // 47 of the 80, so a single slow reply would have started shaving clicks off.
+  if (pending >= MAX_FLUSH * 0.6) ms = Math.min(ms, 300);
+  // Jitter exists to stop 100 phones syncing into a thundering herd, so it scales
+  // with the interval: a full 350ms of noise on a 300ms drain tick would more than
+  // double it, which is real time a player spends watching a stale number.
+  return ms + Math.random() * (ms <= 300 ? 120 : 350);
+}
+
+/* How long to wait between board reads.
+   While a round is LIVE the phone is already spending its request budget on
+   add_score, and the board is only "who you're chasing" — 2.2s is plenty.
+
+   Between rounds the board read is the ONLY traffic the phone makes, because
+   click() drops taps unless state === 'live'. So the budget is free, and the
+   question becomes: what is this poll actually buying?
+
+     over      — the round has ended and the host is at the laptop about to
+                 press START again. This is the one moment staleness is felt:
+                 measured, a phone spent 3.2s of a 5s countdown still showing
+                 the old screen. Worth polling hard.
+     countdown — the start time is already known locally and tick() counts it
+                 down without help. Nothing to learn. Back right off.
+
+   At 100 idle phones the fast case is ~77 req/s against a measured ceiling of
+   185, and it costs nothing during the burst that actually matters. */
+function idleWait() {
+  if (state === 'live') return Math.max(2200, pace() * 1.8);
+  if (state === 'countdown') return 2600 + Math.random() * 600;
+  return 1300 + Math.random() * 300;          // jitter: 100 phones restart together
+}
+
+/* Replies overtake each other, so a board snapshot taken before an add_score
+   landed used to roll the score backwards (measured live: 160 -> 152).
+   Two different trust levels:
+     - add_score  is authoritative and serialised (one flush in flight at a time),
+       so it may move the score either way — that is how an admin reset lands.
+     - get_board  is only a snapshot, so it may RAISE the score but never lower it.
+   An earlier version treated "server says 0" as a reset, which zeroed every new
+   player ~2s after joining, because a fresh player is legitimately 0 in a stale
+   snapshot. Reset is now detected by a lower value persisting while nothing is
+   in flight — staleness clears within one round trip, a real reset does not. */
+function acceptScore(serverVal) {           // from add_score — authoritative
+  const v = Number(serverVal);
+  // A deleted or stale player id replies 200 / live:true / score 0. That is
+  // indistinguishable from a real reset here, so never let it wipe a live total —
+  // flag it and let the next poll decide (a real reset still has a row on the
+  // board, a dead id does not).
+  if (v === 0 && score > 0) {
+    if (++deadHint >= 2) { deadHint = 0; recoverSession(); }
+    return;
+  }
+  deadHint = 0; lowStreak = 0;
+  score = v + pending;
+  scoreN.textContent = num(score);
+  saveMe();
+}
+
+function acceptBoardScore(serverVal) {      // from get_board — raise-only
+  const want = Number(serverVal) + pending + sending;
+  if (want >= score) { lowStreak = 0; score = want; scoreN.textContent = num(score); saveMe(); return; }
+  // lower than what we show. Only believe it once the player is fully settled
+  // (nothing queued, nothing in flight) and it keeps saying so.
+  if (pending || sending) return;
+  if (++lowStreak < 3) return;
+  lowStreak = 0;
+  score = Number(serverVal);
+  scoreN.textContent = num(score);
+  saveMe(true);
+}
+
+function applyScore(r) {
+  syncRound(r.starts_at, r.ends_at);
+  // r.score already includes the batch we just sent, so nothing is in flight
+  acceptScore(r.score);
+  if (r.rank != null) {                       // upgraded backend: rank rides along
+    solo = true;
+    applyBoard({ me: { rank: r.rank, score: r.score }, around: r.around || [],
+                 total_players: r.total_players }, true);
+  }
+}
+
+function applyBoard(b, skipScore) {
+  if (b.total_players != null) $('#total').textContent = ' / ' + b.total_players;
+  if (b.me) {
+    $('#rank').textContent = '#' + b.me.rank;
+    const rc = 'mstat' + (b.me.rank <= 3 ? ' r' + b.me.rank : '');
+    if (stRankEl.className !== rc) stRankEl.className = rc;
+    rankToast(b);                             // competitive feel — "passed X!" / "X passed you"
+    // a board snapshot predates anything still in flight, so add those back on
+    if (!skipScore) acceptBoardScore(b.me.score);
+  }
+  drawChase(b);
+}
+
+async function flush(keepalive, force) {
+  if (!me || sending || (pending <= 0 && !force)) return;
+  // Send at most what the server will actually accept. A phone that was
+  // backgrounded, locked or off-signal for 20s comes back with hundreds queued;
+  // offering them in one call used to keep 80 and bin the rest without a word.
+  // Chunked, the loop simply drains the backlog over the next few ticks.
+  const n = Math.min(pending, MAX_FLUSH);
+  pending -= n; sending = n || 1;                 // sending>0 = in flight
+  const t0 = performance.now();
+  try {
+    const r = await rpc('add_score', { p_player_id: me.id, p_delta: n }, { keepalive });
+    applyScore(r);
+    noteOk(performance.now() - t0);
+  } catch {
+    pending += n;                              // keep the clicks, retry next tick
+    noteErr();
+  }
+  sending = 0;
+}
+
+async function poll() {
+  if (!me) return;
+  const t0 = performance.now();
+  try {
+    const b = await rpc('get_board', { p_limit: 3, p_player: me.id });
+    syncRound(b.starts_at, b.ends_at);
+    applyBoard(b);
+    if (!b.me) await recoverSession();       // our row is gone — rebuild the session
+    noteOk(performance.now() - t0);
+  } catch { noteErr(); /* offline blip — local counter keeps working */ }
+}
+
+/* The loop owns the only timer, and wakeUp() must be able to cut it short.
+   Re-entry is guarded rather than queued: if a cycle is already mid-flight it
+   will reschedule itself on the way out, and by then wakeUp() has already
+   cleared the backoff, so the next tick is soon regardless. */
+let loopT = null, looping = false;
+async function loop() {
+  clearTimeout(loopT); loopT = null;
+  if (looping) return;
+  looping = true;
+  try {
+    if (me && !document.hidden) {
+      const needBoard = Date.now() >= boardDue;
+      if (pending > 0 || (solo && needBoard)) await flush(false, solo && needBoard);
+      if (solo) boardDue = Date.now() + 1400;    // rank came back with the score: no 2nd call
+      // A backlog is an emergency only when it needs more than one call to drain.
+      // Normal fast play sits near the clamp (measured 75 of 80 at 45 clicks/s) and
+      // must still refresh the rank, or "who you're chasing" goes stale exactly when
+      // the player is trying hardest. After a network drop, pending is in the
+      // hundreds, and then banking outranks the rank: a get_board between every
+      // chunk stretched a 4-chunk drain from ~2s to 43s.
+      else if (needBoard && pending <= MAX_FLUSH) { await poll(); boardDue = Date.now() + idleWait(); }
+    }
+  } finally {
+    looping = false;
+    // Between rounds the loop must tick faster than it polls, or boardDue gets
+    // quantised to pace() and a 1.3s target silently becomes 1.8s.
+    loopT = setTimeout(loop, document.hidden ? 4000
+                           : state === 'live' ? pace() : Math.min(pace(), 500));
+  }
+}
+
+// ── competitive feel: announce when you overtake someone or get overtaken ──
+let lastRank = null;
+function rankToast(b) {
+  const r = b.me && b.me.rank;
+  if (!r || state !== 'live') { lastRank = r; return; }
+  if (lastRank !== null && r !== lastRank) {
+    const around = b.around || [];
+    if (r < lastRank) {                                   // moved up → passed the player now just below you
+      const passed = around.find(x => x.rank === r + 1);
+      floatToast('⬆ แซง ' + (passed ? passed.username : 'ขึ้นมา') + '!', 'up');
+    } else {                                              // moved down → the player now just above you passed you
+      const by = around.find(x => x.rank === r - 1);
+      floatToast('⬇ ' + (by ? by.username : 'มีคน') + ' แซงคุณ', 'down');
+    }
+  }
+  lastRank = r;
+}
+function floatToast(msg, dir) {
+  const el = document.createElement('div');
+  el.textContent = msg;
+  el.style.cssText = 'position:fixed;left:50%;top:16%;transform:translateX(-50%);z-index:60;pointer-events:none;'
+    + 'font:700 15px/1 "Space Grotesk",system-ui;letter-spacing:.02em;padding:10px 16px;border-radius:999px;'
+    // No backdrop-filter here: both variants below paint a fully OPAQUE
+    // gradient, so the blur could never be seen — it was pure cost on the one
+    // screen that is mid-tap when this fires, and overtake toasts fire most
+    // often exactly when the race is hottest.
+    + 'white-space:nowrap;box-shadow:0 10px 30px rgba(0,0,0,.5);'
+    + (dir === 'up'
+        ? 'color:#0b0b12;background:linear-gradient(180deg,#ffd27a,#ff7a1a);border:1px solid rgba(255,220,150,.7)'
+        : 'color:#fff;background:linear-gradient(180deg,#5b2a5e,#2a1030);border:1px solid rgba(180,120,255,.4)');
+  document.body.append(el);
+  el.animate(
+    [{ opacity: 0, transform: 'translate(-50%,10px) scale(.9)' },
+     { opacity: 1, transform: 'translate(-50%,0) scale(1)', offset: .15 },
+     { opacity: 1, transform: 'translate(-50%,0) scale(1)', offset: .8 },
+     { opacity: 0, transform: 'translate(-50%,-14px) scale(.98)' }],
+    { duration: 1800, easing: 'cubic-bezier(.2,.9,.2,1)' }
+  ).onfinish = () => el.remove();
+}
+
+// persistent chase rows + rival panel. Rebuilding this list every poll (the old
+// `box.textContent=''`) restarted every CSS animation and re-laid out the whole
+// strip on a phone that is already busy handling taps.
+const chaseMap = new Map();
+let gapParts = null;
+const setTxt = (el, v) => { if (el._v !== v) { el._v = v; el.textContent = v; } };
+
+function drawChase(b) {
+  const rows = (b.around || []).length ? b.around : (b.top || []).slice(0, 3);
+  const box = $('#chase'), keep = new Set();
+  rows.forEach((r, i) => {
+    keep.add(r.id);
+    let c = chaseMap.get(r.id);
+    if (!c) {
+      const el = document.createElement('div');
+      const rk = document.createElement('div'); rk.className = 'rk';
+      const nm = document.createElement('div'); nm.className = 'nm';
+      const nmT = document.createTextNode('');
+      const dp = document.createElement('div'); dp.className = 'dp';
+      nm.append(nmT, document.createElement('br'), dp);
+      const sc = document.createElement('div'); sc.className = 'sc';
+      el.append(rk, nm, sc);
+      c = { el, rk, nmT, dp, sc, cls: '', i: -1 };
+      chaseMap.set(r.id, c);
+      box.append(el);
+    }
+    const cls = 'row' + (me && r.id === me.id ? ' me' : '') + (r.rank <= 3 ? ' p' + r.rank : '');
+    if (c.cls !== cls) { c.cls = cls; c.el.className = cls; }
+    setTxt(c.rk, r.rank);
+    if (c.nmT.nodeValue !== r.username) c.nmT.nodeValue = r.username;
+    setTxt(c.dp, r.department);
+    setTxt(c.sc, num(r.score));
+    if (c.i !== i) { c.i = i; c.el.style.order = i; }   // reorder without rebuilding
+  });
+  for (const [id, c] of chaseMap) if (!keep.has(id)) { c.el.remove(); chaseMap.delete(id); }
+
+  // ── who you are actually racing ──
+  const g = $('#gap');
+  if (!gapParts) {
+    g.innerHTML = '<span class="glabel"></span><b class="gname"></b><span class="gnum"></span><span class="gunit"></span>';
+    gapParts = { l: g.querySelector('.glabel'), n: g.querySelector('.gname'),
+                 v: g.querySelector('.gnum'), u: g.querySelector('.gunit') };
+  }
+  const ahead = rows.find(r => b.me && r.rank === b.me.rank - 1);
+  let cls = '';
+  if (ahead && b.me) {
+    const d = Math.max(1, Number(ahead.score) - Number(b.me.score) + 1);
+    setTxt(gapParts.l, 'next target');
+    setTxt(gapParts.n, ahead.username);
+    setTxt(gapParts.v, num(d));
+    setTxt(gapParts.u, 'to pass');
+    cls = d <= 15 ? 'close' : '';               // within striking distance
+  } else if (b.me && b.me.rank === 1) {
+    const next = rows.find(r => r.rank === 2);
+    setTxt(gapParts.l, next ? 'lead over' : '');
+    setTxt(gapParts.n, next ? next.username : "👑 YOU'RE #1");
+    setTxt(gapParts.v, next ? num(Math.max(0, Number(b.me.score) - Number(next.score))) : '');
+    setTxt(gapParts.u, next ? 'pops' : '');
+    cls = 'lead';
+  } else {
+    setTxt(gapParts.l, ''); setTxt(gapParts.n, ''); setTxt(gapParts.v, ''); setTxt(gapParts.u, '');
+  }
+  if (g._c !== cls) { g._c = cls; g.className = cls; }
+}
+
+// ── round clock ───────────────────────────────────────────
+/* ponytail: no countdown overlay on the phone. The 5-4-3-2-1 is a shared moment
+   on the projector — everyone looks up at the same screen. A phone repeating it
+   in the player's hand is a second, slightly-out-of-sync copy of something they
+   can already see, so the phone just says WAIT and keeps the taps gated. */
+function tick() {
+  const t = $('#timer'), was = state;
+  const toStart = msLeft(startsAt), left = msLeft(endsAt);
+  state = (startsAt && toStart > 0) ? 'countdown'
+        : (!endsAt || left > 0) ? 'live' : 'over';
+
+  if (state === 'countdown') {
+    t.className = 'idle'; t.textContent = 'GET READY';
+    t.title = 'Watch the big screen';
+    $('#hint').textContent = 'watch the big screen…';
+  } else if (state === 'live') {
+    if (!endsAt) { t.className = 'open'; t.textContent = 'OPEN'; t.title = 'No time limit — tap as long as you like'; }
+    else { t.className = left <= 10000 ? 'hot' : ''; t.textContent = clock(left); t.title = 'Time left in this round'; }
+    $('#hint').textContent = 'tap the cat';
+  } else {
+    t.className = 'idle';
+    t.textContent = "TIME'S UP";
+    $('#hint').textContent = 'round finished';
+  }
+  // Bank whatever is queued the moment play stops for ANY reason — the buzzer
+  // lands between a tap and its flush, and those taps were honestly earned.
+  if (was === 'live' && state !== 'live') flush();
+  const now = performance.now();
+  taps = taps.filter(x => now - x < 1000);
+  const rate = state === 'live' ? taps.length : 0;
+  cpsEl.textContent = rate.toFixed(1);
+  if (rate > peakCps) { peakCps = rate; peakEl.textContent = rate.toFixed(1); saveMe(); }
+  const tr = rate >= 15 ? 5 : rate >= 12 ? 4 : rate >= 9 ? 3 : rate >= 6 ? 2 : rate >= 3 ? 1 : 0;
+  if (cpsEl._t !== tr) {
+    cpsEl._t = tr;
+    cpsEl.className = tr ? 't' + tr : '';
+    // the glow goes on the CARD, so the digits underneath stay a cheap layer
+    stCpsEl.className = 'mstat' + (tr >= 3 ? ' t' + tr : '');
+  }
+
+  // heat: the faster you tap, the bigger the number, the harder it shakes and
+  // the hotter the whole screen glows. Scale + opacity only, so it is free.
+  heatK = Math.min(1, rate / 15);
+  const sc = (1 + heatK * .28).toFixed(3);
+  if (tick._sc !== sc) { tick._sc = sc; scoreWrap.style.transform = 'scale(' + sc + ')'; }
+  const op = (heatK * heatK * .8).toFixed(3);
+  if (tick._op !== op) { tick._op = op; heatEl.style.opacity = op; }
+  const s = tr >= 3 ? tr : 0;
+  if (heatTier !== s) {
+    heatTier = s;
+    scoreEl.className = s ? 's' + s : '';
+    stageEl.classList.remove('h3', 'h4', 'h5');
+    if (s) stageEl.classList.add('h' + s);
+  }
+}
+
+/* A blip must not strand the backlog. After a few failures the backoff reaches
+   20s, so a phone that was in a lift, locked, or off-wifi would sit there looking
+   frozen long after it could have banked. Coming back is new information: clear
+   the backoff and restart the loop now instead of serving out the old sentence. */
+function wakeUp() {
+  if (!me) return;
+  errStreak = 0;
+  netLat = Math.min(netLat, 800);
+  loop();
+}
+addEventListener('online', wakeUp);
+addEventListener('visibilitychange', () => { if (document.hidden) flush(true); else wakeUp(); });
+addEventListener('pagehide', () => flush(true));
+
+// resume
+const saved = localStorage.getItem(KEY);
+if (saved) { try { start(JSON.parse(saved)); } catch { localStorage.removeItem(KEY); } }
+
+// came back from an admin reset: everything is still filled in, one tap to rejoin
+try {
+  const back = JSON.parse(sessionStorage.getItem('popcat.rejoin') || 'null');
+  if (back) {
+    sessionStorage.removeItem('popcat.rejoin');
+    $('#f-name').value = back.username || '';
+    $('#f-id').value = back.employee_id || '';
+    if (back.department) {
+      const dept = $('#f-dept');
+      dept.value = back.department;
+      // their old department may no longer be on the list; an unmatched value
+      // leaves selectedIndex -1, which paints an empty box with no placeholder
+      if (dept.selectedIndex < 0) dept.selectedIndex = 0;
+    }
+    $('#joinerr').textContent = 'The event was reset — tap LET ME POP to join again.';
+  }
+} catch { /* nothing to restore */ }
+</script>
+</body>
+</html>

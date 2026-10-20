@@ -1,0 +1,266 @@
+/* ══════════════════════════════════════════════════════════════
+   KAIZEN POP-CAT — Halloween × Analog Devices
+   Design system. Shared by index / leaderboard / admin.
+   ══════════════════════════════════════════════════════════════ */
+
+:root{
+  /* night */
+  --night:#08060f; --night-2:#0e0a1c; --sunk:#0a0714;
+
+  /* halloween */
+  --pumpkin:#ff7a1a; --ember:#ffc14d; --witch:#8b5cf6; --witch-deep:#4c1d95;
+  --toxic:#9dff4d; --blood:#ff2e55; --bone:#f8f3e6;
+
+  /* analog devices (co-host) */
+  --adi:#3aa3ff; --adi-deep:#0067b9;
+
+  --fg:var(--bone); --dim:#a094c6;
+  --up:#5cff9d; --down:#ff5c7a;
+
+  /* haptic surfaces */
+  --glass:linear-gradient(180deg,rgba(255,255,255,.072),rgba(255,255,255,.022));
+  --glass-2:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.014));
+  --hair:rgba(255,255,255,.10);
+  --hair-soft:rgba(255,255,255,.055);
+  --inset:inset 0 1px 0 rgba(255,255,255,.16);
+  --lift:0 26px 60px -34px rgba(255,122,26,.55), 0 8px 26px -18px rgba(0,0,0,.9);
+
+  /* physics */
+  --spring:cubic-bezier(.32,.72,0,1);
+  --pop:cubic-bezier(.2,.9,.2,1);
+
+  --font-display:"Anton","Archivo Black","Segoe UI",system-ui,sans-serif;
+  --font-ui:"Space Grotesk","Leelawadee UI","Noto Sans Thai",system-ui,sans-serif;
+}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;height:100%}
+
+body{
+  background:var(--night);
+  background-image:
+    radial-gradient(ellipse 85% 55% at 50% -12%, rgba(255,122,26,.22), transparent 68%),
+    radial-gradient(ellipse 65% 50% at 6% 108%, rgba(139,92,246,.20), transparent 70%),
+    radial-gradient(ellipse 60% 45% at 96% 96%, rgba(0,103,185,.18), transparent 72%);
+  background-attachment:fixed;
+  color:var(--fg);
+  font-family:var(--font-ui);
+  -webkit-tap-highlight-color:transparent;
+  text-rendering:optimizeLegibility;
+}
+body.noscroll{overflow:hidden}
+
+h1,h2,.display{font-family:var(--font-display);font-weight:400;letter-spacing:.01em}
+button{font:inherit;color:inherit;cursor:pointer}
+input,select{font:inherit}
+
+/* ── atmosphere: bats, fog, candle vignette, film grain ──────── */
+.atmo{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
+.atmo .bat{position:absolute;color:var(--bone);will-change:transform}
+.atmo .fog{
+  position:absolute;left:-25%;width:150%;height:44vh;
+  background:radial-gradient(ellipse 50% 60% at 50% 60%, rgba(139,92,246,.16), transparent 70%);
+  filter:blur(26px);will-change:transform
+}
+.vig{
+  position:fixed;inset:0;z-index:40;pointer-events:none;
+  background:radial-gradient(ellipse at center, transparent 56%, rgba(8,6,15,.72) 100%);
+  animation:flicker 6s ease-in-out infinite
+}
+.grain{
+  position:fixed;inset:0;z-index:41;pointer-events:none;opacity:.05;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E")
+}
+@keyframes flicker{0%,100%{opacity:.9}44%{opacity:1}72%{opacity:.82}}
+@keyframes drift{
+  0%{transform:translate3d(-12vw,0,0) scale(.75) rotate(-4deg)}
+  50%{transform:translate3d(48vw,-7vh,0) scale(1) rotate(3deg)}
+  100%{transform:translate3d(112vw,3vh,0) scale(.75) rotate(-2deg)}
+}
+@keyframes fogroll{0%{transform:translate3d(-10%,0,0)}100%{transform:translate3d(10%,0,0)}}
+
+/* ── double-bezel: glass plate in a machined tray ────────────── */
+.bezel{
+  position:relative;z-index:1;
+  padding:6px;border-radius:30px;
+  background:var(--glass-2);
+  border:1px solid var(--hair-soft);
+  box-shadow:var(--lift);
+}
+.bezel > .core{
+  border-radius:24px;
+  background:linear-gradient(180deg,rgba(20,14,36,.96),rgba(11,8,22,.96));
+  border:1px solid var(--hair);
+  box-shadow:var(--inset);
+}
+
+/* ── eyebrow tag ─────────────────────────────────────────────── */
+.eyebrow{
+  display:inline-flex;align-items:center;gap:.55em;
+  border-radius:999px;padding:5px 11px;
+  font-size:10px;letter-spacing:.22em;text-transform:uppercase;font-weight:600;
+  color:var(--dim);background:rgba(255,255,255,.045);border:1px solid var(--hair-soft)
+}
+.eyebrow .dot{width:5px;height:5px;border-radius:50%;background:var(--toxic);
+  box-shadow:0 0 8px var(--toxic);animation:blip 2.4s ease-in-out infinite}
+@keyframes blip{50%{opacity:.35}}
+
+/* ── ADI co-host lockup ──────────────────────────────────────── */
+.adi{display:inline-flex;align-items:center;gap:.6em;white-space:nowrap}
+.adi-logo{height:1.15em;width:auto;display:block;opacity:.92}
+.adi .mark{
+  width:1.5em;height:1.5em;border-radius:7px;flex:none;display:grid;place-items:center;
+  background:linear-gradient(150deg,var(--adi),var(--adi-deep));
+  color:#fff;font-family:var(--font-display);font-size:.78em;line-height:1;
+  box-shadow:0 0 18px -4px rgba(58,163,255,.75), var(--inset)
+}
+.adi .wm{font-weight:700;letter-spacing:.19em;text-transform:uppercase;color:#cfe3ff;font-size:.72em}
+
+/* ── forms ───────────────────────────────────────────────────── */
+.field{display:block;margin-bottom:14px}
+.field span{
+  display:block;font-size:10px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--dim);margin-bottom:7px;font-weight:600
+}
+.field input,.field select{
+  width:100%;padding:15px 16px;border-radius:16px;
+  background:rgba(6,4,12,.72);border:1px solid var(--hair);color:var(--fg);outline:none;
+  box-shadow:inset 0 2px 8px rgba(0,0,0,.5);
+  transition:border-color .35s var(--spring), box-shadow .35s var(--spring)
+}
+.field input::placeholder{color:#6b6190}
+.field input:focus,.field select:focus{
+  border-color:var(--pumpkin);
+  box-shadow:inset 0 2px 8px rgba(0,0,0,.5), 0 0 0 3px rgba(255,122,26,.2)
+}
+
+/* ── buttons: island pill + button-in-button icon ────────────── */
+.btn{
+  position:relative;width:100%;padding:16px 18px;border-radius:999px;border:0;
+  display:inline-flex;align-items:center;justify-content:center;gap:.7em;
+  font-family:var(--font-display);font-size:17px;letter-spacing:.09em;
+  background:linear-gradient(180deg,var(--ember),var(--pumpkin));
+  color:#1a0d02;
+  box-shadow:0 14px 34px -16px rgba(255,122,26,.9), var(--inset);
+  transition:transform .45s var(--spring), box-shadow .45s var(--spring), filter .3s var(--spring);
+}
+.btn:hover{box-shadow:0 18px 46px -16px rgba(255,122,26,1), var(--inset);filter:brightness(1.05)}
+.btn:active{transform:scale(.975)}
+.btn .ico{
+  width:30px;height:30px;border-radius:50%;flex:none;display:grid;place-items:center;
+  background:rgba(0,0,0,.14);font-size:14px;
+  transition:transform .45s var(--spring)
+}
+.btn:hover .ico{transform:translate(3px,-1px) scale(1.06)}
+.btn.ghost{
+  background:var(--glass);color:var(--fg);border:1px solid var(--hair);
+  box-shadow:var(--inset)
+}
+.btn.danger{background:linear-gradient(180deg,#ff5c7a,var(--blood));color:#fff;
+  box-shadow:0 14px 34px -18px rgba(255,46,85,.9), var(--inset)}
+.btn.small{width:auto;padding:11px 18px;font-size:13px;letter-spacing:.1em}
+.err{color:var(--down);font-size:13px;min-height:20px;margin:8px 0 0;font-weight:600}
+
+/* ── page switcher: same pill language as .eyebrow ───────────── */
+.nav{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:4px;border-radius:999px;position:relative;
+  /* Real backdrop blur. An earlier pass removed this on the theory that the
+     cat animating directly above the pill forces a backdrop readback every
+     frame -- true in principle, and an early A/B seemed to show it costing
+     ~11% of the player's taps. It did not survive a proper old-vs-new test:
+     4 interleaved reps at 45 taps/s landed 219 taps BOTH ways (identical in
+     every pair), cpu 34.6% vs 34.4%, frame p95 16.8ms both. The first result
+     was an artifact -- both arms of that A/B were accidentally the same page.
+     Only RecalcStyle differed, by ~9ms/s out of a 34% budget. Not a reason to
+     downgrade the glass, so the blur stays. */
+  backdrop-filter:blur(12px) saturate(140%);
+  -webkit-backdrop-filter:blur(12px) saturate(140%);
+  background:
+    linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,.025)),
+    rgba(12,10,20,.46);
+  border:1px solid var(--hair-soft);
+  box-shadow:
+    inset 0 1px 1px rgba(255,255,255,.26),
+    inset 0 -1px 1px rgba(255,255,255,.07),
+    0 12px 28px -20px #000;
+}
+.nav a{
+  display:inline-flex;align-items:center;gap:.5em;
+  padding:7px 13px;border-radius:999px;position:relative;
+  font-size:10px;letter-spacing:.19em;text-transform:uppercase;font-weight:700;
+  color:var(--dim);text-decoration:none;white-space:nowrap;
+  transition:color .35s var(--spring), background .35s var(--spring), transform .35s var(--spring);
+}
+.nav a:hover{color:var(--fg);background:rgba(255,255,255,.06)}
+.nav a:active{transform:scale(.94)}
+.nav a.on{
+  color:#1a0d02;
+  background:linear-gradient(180deg,var(--ember),var(--pumpkin));
+  box-shadow:
+    0 8px 20px -12px rgba(255,122,26,.95),
+    inset 0 1px 1px rgba(255,255,255,.55),
+    inset 0 -2px 3px rgba(120,40,0,.30);
+}
+.nav .ni{font-size:12px;line-height:1}
+/* the label is the first thing worth dropping when a phone runs out of room */
+@media (max-width:430px){
+  .nav a{padding:7px 10px;letter-spacing:.14em}
+  .nav a .nl{display:none}
+  .nav a.on .nl{display:inline}
+}
+
+/* ── leaderboard row (shared: chase strip + big board) ───────── */
+.row{
+  display:grid;grid-template-columns:var(--rank-w,2.2em) 1fr auto;
+  align-items:center;gap:10px;
+  padding:.52em .8em;border-radius:15px;
+  background:var(--glass-2);
+  border:1px solid var(--hair-soft);
+  box-shadow:var(--inset);
+  transition:background .5s var(--spring), border-color .5s var(--spring)
+}
+.row .rk{font-family:var(--font-display);color:var(--dim);text-align:center;font-variant-numeric:tabular-nums}
+.row .nm{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:-.005em}
+.row .dp{font-size:.6em;color:var(--dim);font-weight:600;letter-spacing:.13em;text-transform:uppercase}
+.row .sc{font-family:var(--font-display);font-variant-numeric:tabular-nums;color:var(--ember);
+  text-shadow:0 0 22px rgba(255,193,77,.35)}
+
+.row.me{border-color:rgba(58,163,255,.75);background:linear-gradient(90deg,rgba(58,163,255,.16),rgba(255,255,255,.02));
+  box-shadow:0 0 0 1px rgba(58,163,255,.25), var(--inset)}
+.row.me .rk{color:var(--adi)}
+
+.row.p1{
+  background:linear-gradient(90deg,rgba(255,122,26,.30),rgba(139,92,246,.10) 60%,rgba(255,255,255,.02));
+  border-color:rgba(255,193,77,.65);
+  box-shadow:0 0 30px -8px rgba(255,122,26,.55), var(--inset)
+}
+.row.p1 .rk,.row.p1 .sc{color:var(--ember)}
+.row.p2{background:linear-gradient(90deg,rgba(200,205,225,.16),rgba(255,255,255,.02));border-color:rgba(200,205,225,.3)}
+.row.p2 .sc{color:#dfe4f5}
+.row.p3{background:linear-gradient(90deg,rgba(205,127,50,.20),rgba(255,255,255,.02));border-color:rgba(205,127,50,.35)}
+.row.p3 .sc{color:#f0b27a}
+
+.row .mv{width:1em;text-align:center;font-size:.68em;opacity:0;transition:opacity .4s var(--spring)}
+.row.up .mv{opacity:1;color:var(--up)}
+.row.down .mv{opacity:1;color:var(--down)}
+.row.up{animation:flashUp 1s var(--pop)}
+.row.down{animation:flashDown 1s var(--pop)}
+/* Unreachable today — nothing ever puts `up`/`down` on a .row; the projector
+   uses its own opacity-driven .flash/.streak children. Kept compositor-safe so
+   it is not a landmine if anyone wires it up later: the old version animated
+   box-shadow, which repaints the whole lane every frame it runs. */
+@keyframes flashUp{
+  0%{transform:scale(1.025)}
+  100%{transform:none}
+}
+@keyframes flashDown{
+  0%{transform:scale(.988)}
+  100%{transform:none}
+}
+
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+  .atmo,.vig,.grain{display:none}
+}

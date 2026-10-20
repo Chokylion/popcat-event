@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#08060f">
+<title>Kaizen Pop-Cat — Podium</title>
+<link rel="stylesheet" href="style.css">
+<link rel="preload" as="image" href="img/popcat-open.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" media="print" onload="this.media='all'"
+      href="https://fonts.googleapis.com/css2?family=Anton&family=Space+Grotesk:wght@400;500;600;700&display=swap">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🥇</text></svg>">
+<style>
+  body{overflow:hidden}
+  #app{
+    height:100dvh;display:grid;grid-template-rows:auto minmax(0,1.15fr) minmax(0,1fr);
+    gap:clamp(6px,1.2vh,16px);padding:clamp(10px,2vh,22px) clamp(10px,2vw,28px)
+  }
+
+  /* ══ header ═══════════════════════════════════════════ */
+  header{display:flex;align-items:center;gap:clamp(8px,1.4vw,20px);flex-wrap:wrap}
+  .lockup{display:flex;align-items:center;gap:clamp(8px,1vw,14px);min-width:0}
+  .hcat{
+    width:clamp(34px,4.4vw,74px);flex:none;
+    filter:drop-shadow(0 6px 16px rgba(0,0,0,.7)) drop-shadow(0 0 30px rgba(255,122,26,.75));
+    animation:bob 5s ease-in-out infinite
+  }
+  @keyframes bob{50%{transform:translateY(-5px) rotate(-4deg)}}
+  h1{
+    margin:0;font-size:clamp(19px,3.1vw,48px);line-height:.94;
+    background:linear-gradient(100deg,#fff 4%,var(--ember) 38%,var(--pumpkin) 62%,var(--witch));
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 6px 26px rgba(255,122,26,.35))
+  }
+  .subline{display:flex;align-items:center;gap:.9em;margin-top:.35em;flex-wrap:wrap;font-size:clamp(8px,.72vw,12px)}
+  .subline .sep{width:1px;height:1.4em;background:var(--hair)}
+  .subline .live{display:inline-flex;align-items:center;gap:.5em;color:var(--dim);
+    letter-spacing:.2em;text-transform:uppercase;font-weight:600}
+  .subline .live i{width:5px;height:5px;border-radius:50%;background:var(--toxic);
+    box-shadow:0 0 9px var(--toxic);animation:blip 2.4s ease-in-out infinite}
+  #timer{
+    font-family:var(--font-display);font-size:clamp(22px,3.6vw,58px);font-variant-numeric:tabular-nums;
+    padding:.06em clamp(10px,1.1vw,20px);border-radius:18px;line-height:1.2;
+    background:var(--glass);border:1px solid var(--hair);box-shadow:var(--inset)
+  }
+  #timer.hot{color:var(--blood);border-color:rgba(255,46,85,.6);
+    box-shadow:0 0 44px -10px rgba(255,46,85,.95), var(--inset);animation:tick 1s infinite}
+  #timer.idle{color:var(--pumpkin);font-size:clamp(15px,1.9vw,30px);letter-spacing:.14em}
+  .spacer{flex:1}
+  .backlink{
+    display:inline-flex;align-items:center;gap:.6em;text-decoration:none;color:var(--dim);
+    font-size:clamp(9px,.8vw,13px);letter-spacing:.2em;text-transform:uppercase;font-weight:600;
+    padding:.55em 1em;border-radius:999px;background:var(--glass-2);border:1px solid var(--hair-soft);
+    transition:color .45s var(--spring),border-color .45s var(--spring)
+  }
+  .backlink:hover{color:var(--fg);border-color:var(--hair)}
+
+  /* ══ podium ═══════════════════════════════════════════ */
+  .stage{
+    display:grid;grid-template-columns:1fr 1.24fr 1fr;align-items:end;
+    gap:clamp(6px,1.1vw,20px);min-height:0
+  }
+  .slot{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;
+        height:100%;min-width:0;gap:clamp(4px,.7vh,10px)}
+  .slot.empty{opacity:.18}
+
+  /* the cat + its medal ring */
+  .av{position:relative;flex:none;isolation:isolate}
+  .av img{
+    display:block;width:100%;height:100%;object-fit:contain;
+    filter:drop-shadow(0 10px 22px rgba(0,0,0,.75))
+  }
+  .av::before{                      /* animated medal ring */
+    content:"";position:absolute;inset:-9%;border-radius:50%;z-index:-1;
+    background:conic-gradient(from var(--a,0deg),transparent 0 62%,var(--ring) 74%,transparent 86%),
+               radial-gradient(circle,transparent 56%,var(--ring-soft) 60%,transparent 78%);
+    animation:spin 5.5s linear infinite
+  }
+  @property --a{syntax:'<angle>';initial-value:0deg;inherits:false}
+  @keyframes spin{to{--a:360deg}}
+
+  .crown{
+    position:absolute;top:-26%;left:50%;transform:translateX(-50%);
+    font-size:clamp(16px,2.1vw,38px);filter:drop-shadow(0 4px 10px rgba(0,0,0,.8));
+    animation:bob 3.4s ease-in-out infinite
+  }
+  .who{text-align:center;min-width:0;width:100%}
+  .nm{
+    font-family:var(--font-display);line-height:1.05;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+  }
+  .dp{
+    color:var(--dim);font-size:.42em;letter-spacing:.18em;text-transform:uppercase;
+    margin-top:.5em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis
+  }
+  .sc{
+    font-family:var(--font-display);font-variant-numeric:tabular-nums;line-height:1;
+    color:var(--ember);text-shadow:0 0 26px rgba(255,193,77,.5)
+  }
+
+  /* the plinth block */
+  .block{
+    width:100%;border-radius:20px 20px 6px 6px;position:relative;overflow:hidden;
+    background:var(--glass);border:1px solid var(--hair);box-shadow:var(--inset),var(--lift);
+    display:flex;align-items:flex-start;justify-content:center;
+    /* ponytail: flex:none + an explicit % of the slot. A plain height:100% resolves
+       against LEFTOVER flex space, so the biggest avatar got the shortest plinth. */
+    flex:none;
+    transform-origin:bottom;animation:rise .8s var(--spring) both
+  }
+  @keyframes rise{from{transform:scaleY(.35);opacity:0}}
+  .block::after{                    /* slow sheen down the face */
+    content:"";position:absolute;inset:0;
+    background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.13) 48%,transparent 66%);
+    background-size:280% 100%;animation:sheen 6s ease-in-out infinite
+  }
+  @keyframes sheen{0%,55%{background-position:190% 0}100%{background-position:-90% 0}}
+  .pl{
+    font-family:var(--font-display);line-height:1;margin-top:.24em;
+    color:rgba(255,255,255,.30)
+  }
+
+  /* places */
+  .p1{--ring:var(--ember);--ring-soft:rgba(255,193,77,.35)}
+  .p2{--ring:#cfd8ff;--ring-soft:rgba(207,216,255,.28)}
+  .p3{--ring:#ff9a5c;--ring-soft:rgba(255,154,92,.26)}
+  .p1 .av{width:clamp(64px,9.4vw,168px);height:clamp(64px,9.4vw,168px)}
+  .p2 .av,.p3 .av{width:clamp(48px,6.6vw,120px);height:clamp(48px,6.6vw,120px)}
+  .p1 .nm{font-size:clamp(15px,2.15vw,40px)}
+  .p2 .nm,.p3 .nm{font-size:clamp(12px,1.5vw,28px)}
+  .p1 .sc{font-size:clamp(22px,3.5vw,64px)}
+  .p2 .sc,.p3 .sc{font-size:clamp(16px,2.3vw,42px)}
+  .p1 .block{height:38%;background:
+    linear-gradient(180deg,rgba(255,193,77,.24),rgba(255,122,26,.07));
+    border-color:rgba(255,193,77,.5);
+    box-shadow:0 -20px 70px -30px rgba(255,193,77,.9),var(--inset)}
+  .p2 .block{height:26%;background:linear-gradient(180deg,rgba(207,216,255,.16),rgba(255,255,255,.03))}
+  .p3 .block{height:18%;background:linear-gradient(180deg,rgba(255,154,92,.15),rgba(255,255,255,.03))}
+  .p1 .pl{font-size:clamp(26px,4.6vw,88px);color:rgba(255,193,77,.42)}
+  .p2 .pl,.p3 .pl{font-size:clamp(20px,3.2vw,60px)}
+  .p2 .block{animation-delay:.1s} .p3 .block{animation-delay:.2s}
+
+  /* a new leader just took the top spot */
+  .slot.takeover .av{animation:takeover .9s var(--pop)}
+  @keyframes takeover{35%{transform:scale(1.22) rotate(-7deg)}70%{transform:scale(.96) rotate(3deg)}}
+  .slot.takeover .block{box-shadow:0 0 90px -10px var(--ember),var(--inset)}
+
+  /* ══ chasers ══════════════════════════════════════════ */
+  .chase{min-height:0;display:grid}   /* grid, else .core height-collapses to its rows */
+  /* auto 1fr, not flex-column: a flex child shrink-wraps its rows, so #rest's
+     clientHeight could never exceed its content and the fit logic never grew */
+  .chase .core{display:grid;grid-template-rows:auto minmax(0,1fr);min-height:0}
+  .list{display:grid;align-content:start;gap:clamp(3px,.65vh,8px);min-height:0;overflow:hidden}
+  #rest{font-size:clamp(12px,1.15vw,21px);--rank-w:2.1em}
+  #rest .row{grid-template-columns:var(--rank-w) 1fr auto auto;padding:.4em .8em;line-height:1.25}
+  #rest .row .nm{display:flex;align-items:baseline;gap:.65em;min-width:0;
+                 font-family:var(--font-ui);font-weight:700;white-space:nowrap}
+  #rest .row .dp{margin:0;font-size:.62em}
+  #rest .row .sc{font-size:1em;text-shadow:none}
+  .nobody{color:var(--dim);text-align:center;padding:1.4em;font-size:clamp(11px,1vw,16px)}
+
+  /* ══ phone ════════════════════════════════════════════ */
+  @media (max-width:760px){
+    #app{grid-template-rows:auto minmax(0,1.25fr) minmax(0,1fr)}
+    .hcat{display:none}
+    .backlink{display:none}
+    .stage{gap:5px}
+    .p1 .dp,.p2 .dp,.p3 .dp{font-size:.38em;letter-spacing:.1em}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .av::before,.block,.block::after,.crown,.hcat{animation:none}
+  }
+</style>
+</head>
+<body class="noscroll">
+<div id="app">
+  <header>
+    <div class="lockup">
+      <img class="hcat" src="img/popcat-open.png" alt="" aria-hidden="true">
+      <div class="titles">
+        <h1 id="evtname">KAIZEN POP-CAT</h1>
+        <div class="subline">
+          <img class="adi-logo" src="img/adi-logo.svg" alt="Analog Devices">
+          <span class="sep"></span>
+          <span class="live"><i></i>Podium</span>
+        </div>
+      </div>
+    </div>
+    <div id="timer" class="idle">WAITING</div>
+    <div class="spacer"></div>
+    <a class="backlink" href="leaderboard.html">Full board →</a>
+  </header>
+
+  <section class="stage">
+    <div class="slot p2" id="s2"></div>
+    <div class="slot p1" id="s1"></div>
+    <div class="slot p3" id="s3"></div>
+  </section>
+
+  <section class="bezel panel chase"><div class="core">
+    <h2>The chase</h2><div class="list" id="rest"></div>
+  </div></section>
+</div>
+<div id="banner" hidden></div>
+
+<script src="config.js"></script>
+<script src="sb.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+const rest = $('#rest');
+let endsAt = null, prevRank = new Map(), prevScore = new Map(), leader = null,
+    fit = null, wasLive = false, first = true;
+addEventListener('resize', () => fit = null);
+
+$('#evtname').textContent = CFG.EVENT_NAME;
+
+let countGen = 0;
+function countUp(el, from, to) {
+  // ponytail: nodes are reused now, so stamp a generation - an older run must
+  // not keep writing stale numbers over a newer one on the same element.
+  const g = ++countGen;
+  el.dataset.g = g;
+  el.textContent = num(from);                    // never leave the cell blank
+  if (from === to) return;
+  const t0 = performance.now();
+  requestAnimationFrame(function step(t) {
+    if (!el.isConnected || +el.dataset.g !== g) return;
+    const k = Math.min(1, (t - t0) / 500);
+    el.textContent = num(Math.round(from + (to - from) * (1 - Math.pow(1 - k, 3))));
+    if (k < 1) requestAnimationFrame(step);
+  });
+}
+
+function div(cls, text) {
+  const d = document.createElement('div');
+  d.className = cls;
+  if (text != null) d.textContent = text;
+  return d;
+}
+
+// ── the three plinths ────────────────────────────────────
+// ponytail: the slot DOM is built ONCE. Rebuilding it every poll restarted the
+// rise/medal-ring animations, so the whole podium re-grew every 1.2s on the
+// projector. Now only the text and the score change.
+function buildSlot(slot, place) {
+  const av = div('av');
+  const img = document.createElement('img');
+  img.src = place === 1 ? 'img/popcat-open.png' : 'img/popcat-closed.png';
+  img.alt = '';
+  av.append(img);
+  if (place === 1) { const c = div('crown', '👑'); c.hidden = true; av.append(c); }
+
+  const who = div('who');
+  who.append(div('nm', '—'), div('dp', ''));
+
+  const block = div('block');
+  block.append(div('pl', place));
+  slot.append(av, who, div('sc', '0'), block);
+}
+
+function renderPodium(top) {
+  [1, 2, 3].forEach(place => {
+    const slot = $('#s' + place), r = top[place - 1];
+    if (!slot.firstChild) buildSlot(slot, place);
+    slot.classList.toggle('empty', !r);
+
+    const nm = slot.querySelector('.nm'), dp = slot.querySelector('.dp'),
+          sc = slot.querySelector('.sc'), crown = slot.querySelector('.crown');
+    nm.textContent = r ? r.username : '—';
+    dp.textContent = r ? r.department : '';
+    dp.hidden = !r;
+    if (crown) crown.hidden = !r;
+    if (r) countUp(sc, prevScore.get(r.id) ?? Number(r.score), Number(r.score));
+    else sc.textContent = '0';
+  });
+
+  // celebrate a genuine takeover, but not on the very first paint
+  const top1 = top[0]?.id ?? null;
+  if (!first && top1 && top1 !== leader) {
+    const s = $('#s1');
+    s.classList.remove('takeover'); void s.offsetWidth; s.classList.add('takeover');
+  }
+  leader = top1;
+}
+
+// ── everyone chasing them ────────────────────────────────
+function renderRest(list) {
+  const shown = list.slice(0, fit ?? 6);
+  const before = new Map();
+  for (const el of rest.children) before.set(el.dataset.id, el.getBoundingClientRect().top);
+
+  rest.textContent = '';
+  if (!shown.length) {
+    rest.append(div('nobody', 'first three are up there — everyone else lands here'));
+  } else {
+    for (const r of shown) {
+      const el = div('row'); el.dataset.id = r.id;
+      const was = prevRank.get(r.id);
+      if (was !== undefined && was !== r.rank) el.classList.add(was > r.rank ? 'up' : 'down');
+
+      const nm = div('nm', r.username);
+      nm.append(div('dp', r.department));
+      const mv = div('mv', was === undefined ? '' : was > r.rank ? '▲' : was < r.rank ? '▼' : '');
+      const sc = div('sc');
+      countUp(sc, prevScore.get(r.id) ?? Number(r.score), Number(r.score));
+      el.append(div('rk', r.rank), nm, mv, sc);
+      rest.append(el);
+    }
+  }
+
+  // FLIP: slide rows from where they were to where they are now
+  for (const el of rest.children) {
+    const y0 = before.get(el.dataset.id);
+    if (y0 == null) continue;
+    const dy = y0 - el.getBoundingClientRect().top;
+    if (Math.abs(dy) > 1) el.animate([{ transform: `translateY(${dy}px)` }, { transform: 'none' }],
+                                     { duration: 560, easing: 'cubic-bezier(.32,.72,0,1)' });
+  }
+
+  // fill the panel exactly: seed from a real row, then converge ±1
+  const rows = [...rest.children].filter(el => el.dataset.id);
+  const gap = parseFloat(getComputedStyle(rest).rowGap) || 0;
+  if (fit == null && rows.length)
+    fit = Math.max(2, Math.floor((rest.clientHeight + gap) / (rows.at(-1).offsetHeight + gap)));
+  if (rest.scrollHeight > rest.clientHeight + 1) { if (fit > 2) fit--; }
+  else if (fit < list.length && rows.length &&
+           rest.clientHeight - rest.scrollHeight >= rows.at(-1).offsetHeight + gap) fit++;
+}
+
+async function poll() {
+  try {
+    const b = await rpc('get_board', { p_limit: 40 });
+    endsAt = b.ends_at;
+    const top = b.top || [];
+    renderPodium(top);
+    renderRest(top.slice(3));
+    prevRank = new Map(top.map(r => [r.id, r.rank]));
+    prevScore = new Map(top.map(r => [r.id, Number(r.score)]));
+    first = false;
+  } catch (e) { console.error('poll failed:', e); /* keep the last podium on screen */ }
+}
+
+function tick() {
+  const left = msLeft(endsAt), t = $('#timer');
+  const live = !endsAt || left > 0;
+  if (live) {
+    t.className = left <= 10000 && endsAt ? 'hot' : '';
+    t.textContent = endsAt ? clock(left) : 'OPEN';
+    wasLive = !!endsAt;                 // open play never shows a FINAL RESULT banner
+  } else {
+    t.className = 'idle';
+    t.textContent = 'FINISHED';
+  }
+  const b = $('#banner');
+  b.hidden = live || !wasLive;
+  if (!b.hidden) b.textContent = 'FINAL RESULT';
+}
+
+poll(); tick();
+setInterval(poll, 700);   // ponytail: projector-only page (few screens) — cheap read, snappier live feel
+setInterval(tick, 200);
+</script>
+</body>
+</html>
